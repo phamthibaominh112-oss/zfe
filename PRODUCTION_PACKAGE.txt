@@ -1,0 +1,8 @@
+ZE CenterOS Production Package v1.0.2
+
+- Real Supabase authentication and PostgreSQL database
+- Database-enforced RLS role isolation
+- No demo role switcher or localStorage database
+- PostgREST parser typing hotfix applied at the client boundary
+- Dynamic student SELECT strings replaced by explicit role branches
+- Next.js pinned to 16.2.12

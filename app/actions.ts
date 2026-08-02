@@ -1,0 +1,784 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireProfile, requireRole } from "@/lib/auth";
+import { text, toNumber } from "@/lib/format";
+import type { AppRole } from "@/lib/roles";
+
+function go(path: string, message?: string, error?: string): never {
+  const params = new URLSearchParams();
+  if (message) params.set("message", message);
+  if (error) params.set("error", error);
+  redirect(`${path}${params.size ? `?${params.toString()}` : ""}`);
+}
+
+function failMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function assertNoError(error: { message: string } | null) {
+  if (error) throw new Error(error.message);
+}
+
+export async function createStudent(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const code = text(formData.get("code"));
+  const payload: Record<string, unknown> = {
+    full_name: text(formData.get("full_name")),
+    date_of_birth: text(formData.get("date_of_birth")) || null,
+    phone: text(formData.get("phone")) || null,
+    email: text(formData.get("email")) || null,
+    guardian_name: text(formData.get("guardian_name")) || null,
+    guardian_phone: text(formData.get("guardian_phone")) || null,
+    source: text(formData.get("source")) || null,
+    status: text(formData.get("status")) || "Waiting for class",
+    entry_level: text(formData.get("entry_level")) || null,
+    target: text(formData.get("target")) || null,
+    notes: text(formData.get("notes")) || null,
+    created_by: profile.id
+  };
+  if (code) payload.code = code;
+  try {
+    const { error } = await supabase.from("students").insert(payload);
+    assertNoError(error);
+  } catch (error) {
+    go("/students", undefined, failMessage(error));
+  }
+  revalidatePath("/students");
+  go("/students", "Đã tạo hồ sơ học viên.");
+}
+
+
+export async function updateStudent(formData: FormData) {
+  await requireRole(["admin", "academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const studentId = text(formData.get("student_id"));
+  const { error } = await supabase.from("students").update({
+    full_name: text(formData.get("full_name")),
+    date_of_birth: text(formData.get("date_of_birth")) || null,
+    phone: text(formData.get("phone")) || null,
+    email: text(formData.get("email")) || null,
+    guardian_name: text(formData.get("guardian_name")) || null,
+    guardian_phone: text(formData.get("guardian_phone")) || null,
+    source: text(formData.get("source")) || null,
+    status: text(formData.get("status")),
+    entry_level: text(formData.get("entry_level")) || null,
+    target: text(formData.get("target")) || null,
+    notes: text(formData.get("notes")) || null
+  }).eq("id", studentId);
+  if (error) go(`/students/${studentId}`, undefined, error.message);
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students");
+  go(`/students/${studentId}`, "Đã cập nhật hồ sơ học viên.");
+}
+
+export async function createStudentAvailability(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const studentId = text(formData.get("student_id"));
+  const { error } = await supabase.from("student_availability").insert({
+    student_id: studentId,
+    weekday: toNumber(formData.get("weekday")),
+    start_time: text(formData.get("start_time")),
+    end_time: text(formData.get("end_time")),
+    effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
+    effective_to: text(formData.get("effective_to")) || null,
+    is_recurring: formData.get("is_recurring") === "on",
+    note: text(formData.get("note")) || null,
+    created_by: profile.id
+  });
+  if (error) go(`/students/${studentId}`, undefined, error.message);
+  revalidatePath(`/students/${studentId}`);
+  go(`/students/${studentId}`, "Đã lưu lịch rảnh của học viên.");
+}
+
+export async function createClass(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("classes").insert({
+    code: text(formData.get("code")),
+    name: text(formData.get("name")),
+    category: text(formData.get("category")),
+    program_id: text(formData.get("program_id")) || null,
+    level_id: text(formData.get("level_id")) || null,
+    mode: text(formData.get("mode")),
+    campus: text(formData.get("campus")) || null,
+    room: text(formData.get("room")) || null,
+    start_date: text(formData.get("start_date")) || null,
+    expected_end_date: text(formData.get("expected_end_date")) || null,
+    total_hours: toNumber(formData.get("total_hours")),
+    total_sessions: toNumber(formData.get("total_sessions")),
+    target: text(formData.get("target")) || null,
+    capacity: toNumber(formData.get("capacity"), 1),
+    status: text(formData.get("status")) || "Draft",
+    notes: text(formData.get("notes")) || null,
+    created_by: profile.id
+  });
+  if (error) go("/classes", undefined, error.message);
+  revalidatePath("/classes");
+  go("/classes", "Đã tạo lớp học.");
+}
+
+
+export async function updateClass(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const { error } = await supabase.from("classes").update({
+    name: text(formData.get("name")),
+    category: text(formData.get("category")),
+    program_id: text(formData.get("program_id")) || null,
+    level_id: text(formData.get("level_id")) || null,
+    mode: text(formData.get("mode")),
+    campus: text(formData.get("campus")) || null,
+    room: text(formData.get("room")) || null,
+    start_date: text(formData.get("start_date")) || null,
+    expected_end_date: text(formData.get("expected_end_date")) || null,
+    total_hours: toNumber(formData.get("total_hours")),
+    total_sessions: toNumber(formData.get("total_sessions")),
+    target: text(formData.get("target")) || null,
+    capacity: toNumber(formData.get("capacity"), 1),
+    status: text(formData.get("status")),
+    notes: text(formData.get("notes")) || null
+  }).eq("id", classId);
+  if (error) go(`/classes/${classId}`, undefined, error.message);
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  go(`/classes/${classId}`, "Đã cập nhật lớp học.");
+}
+
+export async function assignTeacher(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const { error } = await supabase.from("class_teachers").insert({
+    class_id: classId,
+    teacher_id: text(formData.get("teacher_id")),
+    role: text(formData.get("role")) || "Main teacher",
+    payroll_factor: toNumber(formData.get("payroll_factor"), 1)
+  });
+  if (error) go(`/classes/${classId}`, undefined, error.message);
+  revalidatePath(`/classes/${classId}`);
+  go(`/classes/${classId}`, "Đã phân công giáo viên.");
+}
+
+export async function enrollStudent(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const { error } = await supabase.from("enrollments").insert({
+    class_id: classId,
+    student_id: text(formData.get("student_id")),
+    start_date: text(formData.get("start_date")) || new Date().toISOString().slice(0, 10),
+    status: "Active",
+    target: text(formData.get("target")) || null,
+    enrolled_by: profile.id
+  });
+  if (error) go(`/classes/${classId}`, undefined, error.message);
+  revalidatePath(`/classes/${classId}`);
+  go(`/classes/${classId}`, "Đã xếp học viên vào lớp.");
+}
+
+export async function createTeacherAvailability(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  let teacherId = text(formData.get("teacher_id"));
+  if (profile.role === "teacher") {
+    const { data } = await supabase.from("teachers").select("id").eq("user_id", profile.id).single();
+    teacherId = data?.id || "";
+  }
+  if (!teacherId) go("/schedule", undefined, "Không tìm thấy teacher profile.");
+  const { error } = await supabase.from("teacher_availability").insert({
+    teacher_id: teacherId,
+    weekday: toNumber(formData.get("weekday")),
+    start_time: text(formData.get("start_time")),
+    end_time: text(formData.get("end_time")),
+    mode: text(formData.get("mode")) || null,
+    campus: text(formData.get("campus")) || null,
+    effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
+    effective_to: text(formData.get("effective_to")) || null,
+    is_recurring: formData.get("is_recurring") === "on",
+    note: text(formData.get("note")) || null,
+    created_by: profile.id
+  });
+  if (error) go("/schedule", undefined, error.message);
+  revalidatePath("/schedule");
+  go("/schedule", "Đã lưu lịch rảnh giáo viên.");
+}
+
+export async function createSession(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const { data: session, error } = await supabase.from("sessions").insert({
+    class_id: classId,
+    session_no: toNumber(formData.get("session_no")),
+    scheduled_date: text(formData.get("scheduled_date")),
+    start_time: text(formData.get("start_time")),
+    end_time: text(formData.get("end_time")),
+    duration_hours: toNumber(formData.get("duration_hours")),
+    mode: text(formData.get("mode")),
+    campus: text(formData.get("campus")) || null,
+    room: text(formData.get("room")) || null,
+    meeting_url: text(formData.get("meeting_url")) || null,
+    status: "Scheduled",
+    topic: text(formData.get("topic")) || null,
+    created_by: profile.id
+  }).select("id").single();
+  if (error || !session) go("/schedule", undefined, error?.message || "Không tạo được session.");
+  const teacherId = text(formData.get("teacher_id"));
+  if (teacherId) {
+    const { error: teacherError } = await supabase.from("session_teachers").insert({ session_id: session.id, teacher_id: teacherId, role: "Main teacher", payroll_factor: 1 });
+    if (teacherError) go("/schedule", undefined, teacherError.message);
+  }
+  revalidatePath("/schedule");
+  revalidatePath(`/classes/${classId}`);
+  go("/schedule", "Đã tạo session.");
+}
+
+export async function completeSession(formData: FormData) {
+  await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const { error } = await supabase.rpc("complete_teaching_session", { p_session_id: sessionId, p_topic: text(formData.get("topic")) || null });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  revalidatePath("/dashboard");
+  go("/academic", "Session đã được xác nhận hoàn thành.");
+}
+
+export async function markAttendance(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("attendance").upsert({
+    session_id: text(formData.get("session_id")),
+    student_id: text(formData.get("student_id")),
+    status: text(formData.get("status")),
+    late_minutes: toNumber(formData.get("late_minutes")),
+    reason: text(formData.get("reason")) || null,
+    marked_by: profile.id,
+    marked_at: new Date().toISOString()
+  }, { onConflict: "session_id,student_id" });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Đã cập nhật attendance.");
+}
+
+export async function saveHomework(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("homework_records").upsert({
+    session_id: text(formData.get("session_id")),
+    student_id: text(formData.get("student_id")),
+    status: text(formData.get("status")),
+    note: text(formData.get("note")) || null,
+    marked_by: profile.id,
+    marked_at: new Date().toISOString()
+  }, { onConflict: "session_id,student_id" });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Đã cập nhật homework completion.");
+}
+
+export async function createAssignment(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("assignments").insert({
+    class_id: text(formData.get("class_id")),
+    session_id: text(formData.get("session_id")) || null,
+    title: text(formData.get("title")),
+    instructions: text(formData.get("instructions")),
+    due_at: text(formData.get("due_at")) || null,
+    max_score: toNumber(formData.get("max_score"), 100),
+    created_by: profile.id,
+    published_at: formData.get("publish") === "on" ? new Date().toISOString() : null
+  });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Đã tạo assignment.");
+}
+
+export async function submitAssignment(formData: FormData) {
+  const profile = await requireRole(["student"]);
+  const supabase = await createClient();
+  const assignmentId = text(formData.get("assignment_id"));
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) go("/dashboard", undefined, "Vui lòng chọn file bài làm.");
+  const { data: student } = await supabase.from("students").select("id").eq("user_id", profile.id).single();
+  if (!student) go("/dashboard", undefined, "Không tìm thấy student profile.");
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${student.id}/${assignmentId}/${Date.now()}-${safeName}`;
+  const { error: uploadError } = await supabase.storage.from("assignment-files").upload(path, file, { upsert: false });
+  if (uploadError) go("/dashboard", undefined, uploadError.message);
+  const { data: existing } = await supabase.from("assignment_submissions").select("id,status").eq("assignment_id", assignmentId).eq("student_id", student.id).maybeSingle();
+  if (existing) {
+    if (existing.status !== "Revision required") go("/dashboard", undefined, "Assignment này đã được nộp và chưa được mở resubmission.");
+    const { error } = await supabase.rpc("resubmit_assignment", { p_assignment_id: assignmentId, p_file_path: path });
+    if (error) go("/dashboard", undefined, error.message);
+  } else {
+    const { error } = await supabase.from("assignment_submissions").insert({ assignment_id: assignmentId, student_id: student.id, file_path: path, status: "Submitted" });
+    if (error) go("/dashboard", undefined, error.message);
+  }
+  revalidatePath("/dashboard");
+  go("/dashboard", "Đã nộp bài.");
+}
+
+export async function createAssessment(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("assessments").insert({
+    class_id: text(formData.get("class_id")),
+    name: text(formData.get("name")),
+    type: text(formData.get("type")),
+    assessment_date: text(formData.get("assessment_date")) || null,
+    max_score: toNumber(formData.get("max_score"), 100),
+    status: "Draft",
+    created_by: profile.id
+  });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Đã tạo assessment.");
+}
+
+export async function saveAssessmentResult(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const publish = formData.get("publish") === "on";
+  const { error } = await supabase.from("assessment_results").upsert({
+    assessment_id: text(formData.get("assessment_id")),
+    student_id: text(formData.get("student_id")),
+    score: text(formData.get("score")) ? toNumber(formData.get("score")) : null,
+    band: text(formData.get("band")) || null,
+    cefr: text(formData.get("cefr")) || null,
+    comment: text(formData.get("comment")) || null,
+    graded_by: profile.id,
+    graded_at: new Date().toISOString(),
+    published_at: publish ? new Date().toISOString() : null
+  }, { onConflict: "assessment_id,student_id" });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Đã lưu điểm assessment.");
+}
+
+export async function submitProgressFeedback(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("progress_feedback").upsert({
+    enrollment_id: text(formData.get("enrollment_id")),
+    milestone: toNumber(formData.get("milestone")),
+    strengths: text(formData.get("strengths")),
+    areas_to_improve: text(formData.get("areas_to_improve")),
+    attendance_summary: text(formData.get("attendance_summary")) || null,
+    homework_summary: text(formData.get("homework_summary")) || null,
+    current_performance: text(formData.get("current_performance")),
+    recommendation: text(formData.get("recommendation")),
+    risk_level: text(formData.get("risk_level")) || "Low",
+    status: "Submitted",
+    submitted_by: profile.id,
+    submitted_at: new Date().toISOString(),
+    revision_note: null
+  }, { onConflict: "enrollment_id,milestone" });
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", "Feedback đã gửi quản lý học vụ duyệt.");
+}
+
+export async function reviewProgressFeedback(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const id = text(formData.get("feedback_id"));
+  const decision = text(formData.get("decision"));
+  const now = new Date().toISOString();
+  const payload = decision === "publish"
+    ? { status: "Published", approved_by: profile.id, approved_at: now, published_at: now, revision_note: null }
+    : decision === "revision"
+      ? { status: "Revision requested", revision_note: text(formData.get("revision_note")), approved_by: null, approved_at: null, published_at: null }
+      : { status: "Rejected", revision_note: text(formData.get("revision_note")), approved_by: profile.id, approved_at: now, published_at: null };
+  const { error } = await supabase.from("progress_feedback").update(payload).eq("id", id);
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  go("/academic", decision === "publish" ? "Feedback đã được duyệt và publish cho học viên." : "Đã cập nhật quyết định duyệt.");
+}
+
+export async function createObservation(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const templateId = text(formData.get("template_id"));
+  const share = formData.get("share") === "on";
+  const { data: criteria, error: criteriaError } = await supabase.from("observation_criteria").select("id,max_score,weight").eq("template_id", templateId).order("sort_order");
+  if (criteriaError) go("/quality", undefined, criteriaError.message);
+  let weightedScore = 0;
+  let totalWeight = 0;
+  const scoreRows = (criteria || []).map((criterion: any) => {
+    const score = toNumber(formData.get(`criterion_${criterion.id}`));
+    weightedScore += (score / Number(criterion.max_score || 5)) * Number(criterion.weight || 1);
+    totalWeight += Number(criterion.weight || 1);
+    return { criterion_id: criterion.id, score, note: text(formData.get(`note_${criterion.id}`)) || null };
+  });
+  const totalScore = totalWeight ? Math.round((weightedScore / totalWeight) * 1000) / 10 : null;
+  const { data: observation, error } = await supabase.from("teacher_observations").insert({
+    teacher_id: text(formData.get("teacher_id")),
+    session_id: text(formData.get("session_id")) || null,
+    observer_id: profile.id,
+    template_id: templateId,
+    type: text(formData.get("type")) || "Scheduled",
+    status: share ? "Shared" : "Draft",
+    total_score: totalScore,
+    strengths: text(formData.get("strengths")) || null,
+    areas_to_improve: text(formData.get("areas_to_improve")) || null,
+    required_actions: text(formData.get("required_actions")) || null,
+    follow_up_due_at: text(formData.get("follow_up_due_at")) || null,
+    shared_at: share ? new Date().toISOString() : null
+  }).select("id").single();
+  if (error || !observation) go("/quality", undefined, error?.message || "Không tạo được observation.");
+  if (scoreRows.length) {
+    const { error: scoreError } = await supabase.from("observation_scores").insert(scoreRows.map((row: { criterion_id: string; score: number; note: string | null }) => ({ ...row, observation_id: observation.id })));
+    if (scoreError) go("/quality", undefined, scoreError.message);
+  }
+  revalidatePath("/quality");
+  go("/quality", "Đã lưu observation và rubric scores.");
+}
+
+export async function createTuitionAccount(formData: FormData) {
+  const profile = await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const gross = toNumber(formData.get("gross_amount"));
+  const discount = toNumber(formData.get("discount_amount"));
+  const net = Math.max(gross - discount, 0);
+  const { error } = await supabase.from("tuition_accounts").insert({
+    student_id: text(formData.get("student_id")),
+    enrollment_id: text(formData.get("enrollment_id")) || null,
+    package_name: text(formData.get("package_name")),
+    gross_amount: gross,
+    discount_amount: discount,
+    net_amount: net,
+    paid_amount: 0,
+    balance_amount: net,
+    purchased_hours: text(formData.get("purchased_hours")) ? toNumber(formData.get("purchased_hours")) : null,
+    renewal_due_date: text(formData.get("renewal_due_date")) || null,
+    status: "Open",
+    created_by: profile.id
+  });
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã tạo tài khoản học phí.");
+}
+
+export async function addPayment(formData: FormData) {
+  const profile = await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("payment_transactions").insert({
+    tuition_account_id: text(formData.get("tuition_account_id")),
+    amount: toNumber(formData.get("amount")),
+    paid_at: text(formData.get("paid_at")) || new Date().toISOString(),
+    method: text(formData.get("method")) || null,
+    reference: text(formData.get("reference")) || null,
+    note: text(formData.get("note")) || null,
+    created_by: profile.id
+  });
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã ghi nhận thanh toán.");
+}
+
+export async function createRenewalFollowup(formData: FormData) {
+  const profile = await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("renewal_followups").insert({
+    tuition_account_id: text(formData.get("tuition_account_id")),
+    assigned_to: profile.id,
+    due_at: text(formData.get("due_at")),
+    status: "Pending",
+    note: text(formData.get("note")) || null,
+    created_by: profile.id
+  });
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã tạo lịch follow-up tái phí.");
+}
+
+export async function rateTeacher(formData: FormData) {
+  await requireRole(["student"]);
+  const supabase = await createClient();
+  const { data: student } = await supabase.from("students").select("id").eq("user_id", (await requireProfile()).id).single();
+  if (!student) go("/dashboard", undefined, "Không tìm thấy student profile.");
+  const { error } = await supabase.from("teacher_ratings").upsert({
+    session_id: text(formData.get("session_id")),
+    student_id: student.id,
+    teacher_id: text(formData.get("teacher_id")),
+    overall: toNumber(formData.get("overall")),
+    clarity: toNumber(formData.get("clarity")),
+    engagement: toNumber(formData.get("engagement")),
+    supportiveness: toNumber(formData.get("supportiveness")),
+    pace: toNumber(formData.get("pace")),
+    comment: text(formData.get("comment")) || null
+  }, { onConflict: "session_id,student_id,teacher_id" });
+  if (error) go("/dashboard", undefined, error.message);
+  revalidatePath("/dashboard");
+  go("/dashboard", "Cảm ơn bạn đã đánh giá buổi học.");
+}
+
+export async function adminCreateUser(formData: FormData) {
+  await requireRole(["admin"]);
+  const email = text(formData.get("email")).toLowerCase();
+  const password = text(formData.get("password"));
+  const fullName = text(formData.get("full_name"));
+  const role = text(formData.get("role")) as AppRole;
+  if (password.length < 8) go("/admin/users", undefined, "Mật khẩu tạm phải có ít nhất 8 ký tự.");
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: fullName } });
+  if (error || !data.user) go("/admin/users", undefined, error?.message || "Không tạo được user.");
+  const userId = data.user.id;
+  const { error: profileError } = await admin.from("profiles").upsert({ id: userId, full_name: fullName, role, is_active: true });
+  if (profileError) go("/admin/users", undefined, profileError.message);
+  if (role === "teacher") {
+    const existingTeacherId = text(formData.get("link_teacher_id"));
+    const result = existingTeacherId
+      ? await admin.from("teachers").update({ user_id: userId, full_name: fullName, email }).eq("id", existingTeacherId)
+      : await admin.from("teachers").insert({ user_id: userId, full_name: fullName, email });
+    if (result.error) go("/admin/users", undefined, result.error.message);
+  }
+  if (role === "student") {
+    const existingStudentId = text(formData.get("link_student_id"));
+    const result = existingStudentId
+      ? await admin.from("students").update({ user_id: userId, full_name: fullName, email }).eq("id", existingStudentId)
+      : await admin.from("students").insert({ user_id: userId, full_name: fullName, email, created_by: (await requireProfile()).id });
+    if (result.error) go("/admin/users", undefined, result.error.message);
+  }
+  revalidatePath("/admin/users");
+  go("/admin/users", "Đã tạo tài khoản và gán role.");
+}
+
+export async function updateOwnProfile(formData: FormData) {
+  await requireProfile();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_own_profile", { p_full_name: text(formData.get("full_name")) });
+  if (error) go("/profile", undefined, error.message);
+  revalidatePath("/profile");
+  go("/profile", "Đã cập nhật tên hiển thị.");
+}
+
+export async function archiveStudent(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("students").update({ archived_at: new Date().toISOString(), archived_by: profile.id, status: "Archived" }).eq("id", text(formData.get("student_id")));
+  if (error) go("/students", undefined, error.message);
+  revalidatePath("/students");
+  go("/students", "Đã archive hồ sơ học viên.");
+}
+
+export async function archiveClass(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("classes").update({ archived_at: new Date().toISOString(), archived_by: profile.id, status: "Closed" }).eq("id", text(formData.get("class_id")));
+  if (error) go("/classes", undefined, error.message);
+  revalidatePath("/classes");
+  go("/classes", "Đã archive lớp học.");
+}
+
+export async function adminUpdateUser(formData: FormData) {
+  await requireRole(["admin"]);
+  const userId = text(formData.get("user_id"));
+  const role = text(formData.get("role")) as AppRole;
+  const isActive = formData.get("is_active") === "on";
+  const fullName = text(formData.get("full_name"));
+  const admin = createAdminClient();
+  const { error } = await admin.from("profiles").update({ role, is_active: isActive, full_name: fullName }).eq("id", userId);
+  if (error) go("/admin/users", undefined, error.message);
+  const { data: existingTeacher } = await admin.from("teachers").select("id").eq("user_id", userId).maybeSingle();
+  const { data: existingStudent } = await admin.from("students").select("id").eq("user_id", userId).maybeSingle();
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const email = authUser.user?.email || null;
+  if (role === "teacher" && !existingTeacher) {
+    const { error: teacherError } = await admin.from("teachers").insert({ user_id: userId, full_name: fullName, email });
+    if (teacherError) go("/admin/users", undefined, teacherError.message);
+  }
+  if (role === "student" && !existingStudent) {
+    const { error: studentError } = await admin.from("students").insert({ user_id: userId, full_name: fullName, email, created_by: (await requireProfile()).id });
+    if (studentError) go("/admin/users", undefined, studentError.message);
+  }
+  revalidatePath("/admin/users");
+  go("/admin/users", "Đã cập nhật role và trạng thái tài khoản.");
+}
+
+export async function adminSendPasswordReset(formData: FormData) {
+  await requireRole(["admin"]);
+  const email = text(formData.get("email"));
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email });
+  if (error) go("/admin/users", undefined, error.message);
+  // The generated link is intentionally not displayed in the UI. Configure Supabase SMTP
+  // and use the normal forgot-password flow for delivery in production.
+  if (!data.properties?.action_link) go("/admin/users", undefined, "Không tạo được recovery link.");
+  go("/admin/users", "Recovery link đã được tạo. Hãy cấu hình SMTP và dùng màn hình Forgot Password để gửi email tự động.");
+}
+
+export async function rescheduleSession(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const { error } = await supabase.rpc("reschedule_session", {
+    p_session_id: text(formData.get("session_id")),
+    p_new_date: text(formData.get("new_date")),
+    p_new_start: text(formData.get("new_start")),
+    p_new_end: text(formData.get("new_end")),
+    p_reason: text(formData.get("reason"))
+  });
+  if (error) go(`/classes/${classId}`, undefined, error.message);
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/schedule");
+  go(`/classes/${classId}`, "Đã đổi lịch và lưu session change history.");
+}
+
+export async function gradeAssignmentSubmission(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const supabase = await createClient();
+  const submissionId = text(formData.get("submission_id"));
+  const status = text(formData.get("status")) || "Graded";
+  const { error } = await supabase.from("assignment_submissions").update({
+    score: text(formData.get("score")) ? toNumber(formData.get("score")) : null,
+    feedback: text(formData.get("feedback")) || null,
+    status,
+    graded_by: profile.id,
+    graded_at: new Date().toISOString()
+  }).eq("id", submissionId);
+  if (error) go("/academic", undefined, error.message);
+  revalidatePath("/academic");
+  revalidatePath("/dashboard");
+  go("/academic", status === "Revision required" ? "Đã yêu cầu học viên chỉnh sửa bài." : "Đã chấm và lưu kết quả assignment.");
+}
+
+export async function createProgram(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("programs").insert({
+    code: text(formData.get("code")).toUpperCase(),
+    name: text(formData.get("name")),
+    category: text(formData.get("category")),
+    is_active: true
+  });
+  if (error) go("/catalog", undefined, error.message);
+  revalidatePath("/catalog");
+  go("/catalog", "Đã tạo chương trình.");
+}
+
+export async function updateProgram(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("programs").update({
+    code: text(formData.get("code")).toUpperCase(),
+    name: text(formData.get("name")),
+    category: text(formData.get("category")),
+    is_active: formData.get("is_active") === "on"
+  }).eq("id", text(formData.get("program_id")));
+  if (error) go("/catalog", undefined, error.message);
+  revalidatePath("/catalog");
+  go("/catalog", "Đã cập nhật chương trình.");
+}
+
+export async function createLevel(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("levels").insert({
+    program_id: text(formData.get("program_id")),
+    code: text(formData.get("code")).toUpperCase(),
+    name: text(formData.get("name")),
+    sequence_no: toNumber(formData.get("sequence_no"), 1),
+    is_active: true
+  });
+  if (error) go("/catalog", undefined, error.message);
+  revalidatePath("/catalog");
+  go("/catalog", "Đã tạo level.");
+}
+
+export async function updateLevel(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("levels").update({
+    code: text(formData.get("code")).toUpperCase(),
+    name: text(formData.get("name")),
+    sequence_no: toNumber(formData.get("sequence_no"), 1),
+    is_active: formData.get("is_active") === "on"
+  }).eq("id", text(formData.get("level_id")));
+  if (error) go("/catalog", undefined, error.message);
+  revalidatePath("/catalog");
+  go("/catalog", "Đã cập nhật level.");
+}
+
+export async function createCourseTemplate(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("course_templates").insert({
+    program_id: text(formData.get("program_id")),
+    level_id: text(formData.get("level_id")) || null,
+    name: text(formData.get("name")),
+    total_hours: toNumber(formData.get("total_hours")),
+    total_sessions: toNumber(formData.get("total_sessions")),
+    target: text(formData.get("target")) || null,
+    midterm_percent: toNumber(formData.get("midterm_percent"), 50),
+    final_percent: 100,
+    is_active: true
+  });
+  if (error) go("/catalog", undefined, error.message);
+  revalidatePath("/catalog");
+  go("/catalog", "Đã tạo course template.");
+}
+
+export async function updateTuitionAccount(formData: FormData) {
+  await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const accountId = text(formData.get("tuition_account_id"));
+  const gross = toNumber(formData.get("gross_amount"));
+  const discount = toNumber(formData.get("discount_amount"));
+  const net = Math.max(gross - discount, 0);
+  const { data: current, error: fetchError } = await supabase.from("tuition_accounts").select("paid_amount").eq("id", accountId).single();
+  if (fetchError) go("/finance", undefined, fetchError.message);
+  const paid = Number(current?.paid_amount || 0);
+  const status = paid >= net ? "Paid" : paid > 0 ? "Partially paid" : "Open";
+  const { error } = await supabase.from("tuition_accounts").update({
+    package_name: text(formData.get("package_name")),
+    gross_amount: gross,
+    discount_amount: discount,
+    net_amount: net,
+    balance_amount: Math.max(net - paid, 0),
+    purchased_hours: text(formData.get("purchased_hours")) ? toNumber(formData.get("purchased_hours")) : null,
+    renewal_due_date: text(formData.get("renewal_due_date")) || null,
+    status
+  }).eq("id", accountId);
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã cập nhật tài khoản học phí.");
+}
+
+export async function updatePayment(formData: FormData) {
+  await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("payment_transactions").update({
+    amount: toNumber(formData.get("amount")),
+    paid_at: text(formData.get("paid_at")),
+    method: text(formData.get("method")) || null,
+    reference: text(formData.get("reference")) || null,
+    note: text(formData.get("note")) || null
+  }).eq("id", text(formData.get("payment_id")));
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã điều chỉnh payment transaction và tái tính công nợ.");
+}
+
+export async function updateRenewalFollowup(formData: FormData) {
+  await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("renewal_followups").update({
+    due_at: text(formData.get("due_at")),
+    status: text(formData.get("status")),
+    outcome: text(formData.get("outcome")) || null,
+    note: text(formData.get("note")) || null
+  }).eq("id", text(formData.get("followup_id")));
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/finance");
+  go("/finance", "Đã cập nhật follow-up tái phí.");
+}
