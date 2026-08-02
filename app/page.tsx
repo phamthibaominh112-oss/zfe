@@ -1,2 +1,6 @@
 import { redirect } from "next/navigation";
-export default function Home() { redirect("/dashboard"); }
+import { isPlatformConfigured } from "@/lib/env";
+
+export default function Home() {
+  redirect(isPlatformConfigured() ? "/dashboard" : "/setup");
+}

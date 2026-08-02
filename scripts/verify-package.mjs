@@ -48,6 +48,10 @@ for (const file of ["lib/supabase/server.ts", "lib/supabase/client.ts", "lib/sup
   if (!/as any/.test(read(file))) failures.push(`Supabase parser boundary fix missing in ${file}`);
 }
 
+const runtimeProxy = read("lib/supabase/proxy.ts");
+if (!runtimeProxy.includes("isPlatformConfigured")) failures.push("Missing runtime environment guard in Supabase proxy");
+if (!fs.existsSync(path.join(root, "app/setup/page.tsx"))) failures.push("Missing production setup page");
+
 const appShell = read("components/app-shell.tsx");
 if (/setRole|localStorage|data-role-switch/i.test(appShell)) failures.push("Demo role switching detected");
 if (failures.length) {
