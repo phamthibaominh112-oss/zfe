@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(new URL("..", import.meta.url).pathname);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const required = [
   "app/(auth)/login/page.tsx",
@@ -17,8 +18,13 @@ for (const file of required) if (!fs.existsSync(path.join(root, file))) failures
 const pkg = JSON.parse(read("package.json"));
 if (pkg.dependencies.next !== "16.2.12") failures.push("Next.js must remain pinned to patched 16.2.12");
 if (!String(pkg.engines?.node || "").includes("22")) failures.push("Node.js 22 is required by current Supabase JS");
-const env = read(".env.example");
-if (env.includes("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")) failures.push("Service role key must never be public");
+const envTemplate = [".env.example", "env.example"].find((file) => fs.existsSync(path.join(root, file)));
+if (envTemplate) {
+  const env = read(envTemplate);
+  if (env.includes("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")) failures.push("Service role key must never be public");
+} else {
+  console.warn("ZE CenterOS verification: env template not found; skipping documentation-only env template check.");
+}
 const roles = read("lib/roles.ts");
 if (/finance[^\n]+academic_manager|finance[^\n]+teacher/.test(roles)) failures.push("Finance route leaked to academic/teacher role");
 const rls = read("supabase/migrations/002_rls.sql");
