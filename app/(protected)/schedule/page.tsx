@@ -3,16 +3,13 @@ import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms"
 import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
+import { dateOnlyString, vietnamWeek } from "@/lib/vietnam-date";
 import { createClient } from "@/lib/supabase/server";
 
 const DAY_LABELS = ["Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy","Chủ nhật"];
 
 function getWeek(offset: number) {
-  const today = new Date();
-  const day = today.getDay() || 7;
-  const start = new Date(today); start.setDate(today.getDate() - day + 1 + offset * 7);
-  const days = Array.from({length:7},(_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return d; });
-  return days;
+  return vietnamWeek(offset);
 }
 
 export default async function SchedulePage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
@@ -20,8 +17,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const offset = Number(params.week || 0);
   const days = getWeek(Number.isFinite(offset) ? offset : 0);
-  const start = days[0].toISOString().slice(0,10);
-  const end = days[6].toISOString().slice(0,10);
+  const start = dateOnlyString(days[0]);
+  const end = dateOnlyString(days[6]);
   const supabase = await createClient();
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
@@ -68,7 +65,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <a className="button button-ghost" href={`/schedule?week=${offset+1}`}>Tuần sau →</a>
     </div>
     <div className="week-grid">
-      {days.map((day,index)=>{ const key=day.toISOString().slice(0,10); const items=(sessions.data||[]).filter((x:any)=>x.scheduled_date===key); return <section className="day-column" key={key}><div className="day-header"><span>{DAY_LABELS[index]}</span><strong>{day.getDate().toString().padStart(2,"0")}/{(day.getMonth()+1).toString().padStart(2,"0")}</strong></div><div className="day-events">{items.length ? items.map((item:any)=><article className={`session-card ${item.mode === "Offline" ? "offline" : ""}`} key={item.id}><strong>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)} · {item.duration_hours}h</strong><span>{item.classes?.code} · #{item.session_no}</span><small>{(item.session_teachers||[]).map((x:any)=>x.teachers?.full_name).filter(Boolean).join(", ") || "Chưa phân GV"}</small><small><Status value={item.status}/></small></article>) : <span className="muted-text">Không có lịch</span>}</div></section>; })}
+      {days.map((day,index)=>{ const key=dateOnlyString(day); const items=(sessions.data||[]).filter((x:any)=>x.scheduled_date===key); return <section className="day-column" key={key}><div className="day-header"><span>{DAY_LABELS[index]}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong></div><div className="day-events">{items.length ? items.map((item:any)=><article className={`session-card ${item.mode === "Offline" ? "offline" : ""}`} key={item.id}><strong>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)} · {item.duration_hours}h</strong><span>{item.classes?.code} · #{item.session_no}</span><small>{(item.session_teachers||[]).map((x:any)=>x.teachers?.full_name).filter(Boolean).join(", ") || "Chưa phân GV"}</small><small><Status value={item.status}/></small></article>) : <span className="muted-text">Không có lịch</span>}</div></section>; })}
     </div>
     {profile.role !== "student" ? <Panel className="section-gap" title="Teacher availability" description={canManage ? "Học vụ thấy toàn bộ availability để match; giáo viên chỉ thấy của mình." : "Availability của chính bạn"}>
       {availability.data?.length ? <div className="table-wrap"><table className="data-table"><thead><tr>{canManage ? <th>Giáo viên</th> : null}<th>Ngày</th><th>Khung giờ</th><th>Mode / Cơ sở</th><th>Hiệu lực</th><th>Ghi chú</th></tr></thead><tbody>{availability.data.map((item:any)=><tr key={item.id}>{canManage ? <td><strong>{item.teachers?.code} · {item.teachers?.full_name}</strong></td> : null}<td>{DAY_LABELS[item.weekday-1]}</td><td>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</td><td>{item.mode || "Any"} · {item.campus || "Any campus"}</td><td>{formatDate(item.effective_from)} → {formatDate(item.effective_to)}</td><td>{item.note || "—"}</td></tr>)}</tbody></table></div> : <Empty title="Chưa có availability" description="Giáo viên cần book lịch rảnh hàng tuần."/>}

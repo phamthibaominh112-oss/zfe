@@ -25,9 +25,14 @@ export function AppShell({ profile, children }: { profile: Profile; children: Re
         <nav className="sidebar-nav">
           {visible.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const label = profile.role === "student" && item.href === "/schedule"
+              ? "Lịch học"
+              : profile.role === "student" && item.href === "/finance"
+                ? "Học phí"
+                : item.label;
             return (
               <Link className={active ? "nav-item nav-active" : "nav-item"} href={item.href} key={item.href} onClick={() => setOpen(false)}>
-                <i>{item.short}</i><span>{item.label}</span>
+                <i>{item.short}</i><span>{label}</span>
               </Link>
             );
           })}

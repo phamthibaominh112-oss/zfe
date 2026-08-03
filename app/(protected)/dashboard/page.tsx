@@ -4,13 +4,21 @@ import { PageHeader, MetricCard, Panel, Status, Flash, Empty } from "@/component
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatMoney } from "@/lib/format";
+import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/vietnam-date";
 
 function weekRange() {
-  const now = new Date();
-  const day = now.getDay() || 7;
-  const start = new Date(now); start.setDate(now.getDate() - day + 1);
-  const end = new Date(start); end.setDate(start.getDate() + 6);
-  return [start.toISOString().slice(0,10), end.toISOString().slice(0,10)];
+  const now = vietnamTodayDate();
+  const day = now.getUTCDay() || 7;
+  const start = new Date(now);
+  start.setUTCDate(now.getUTCDate() - day + 1);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  return [dateOnlyString(start), dateOnlyString(end)];
+}
+
+function joinedClass(value: unknown): Record<string, any> | null {
+  if (Array.isArray(value)) return (value[0] as Record<string, any> | undefined) || null;
+  return value && typeof value === "object" ? value as Record<string, any> : null;
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
@@ -104,35 +112,51 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const { data: student } = await supabase.from("students").select("id,full_name,code,target,entry_level").eq("user_id", profile.id).single();
   if (!student) return <><PageHeader eyebrow="Student portal" title="Hồ sơ chưa được liên kết" description="Admin cần liên kết user account với student profile trước khi sử dụng." /><div className="message error">Không tìm thấy student profile cho tài khoản này.</div></>;
-  const { data: enrollments } = await supabase.from("enrollments").select("id,class_id,status,classes(id,code,name,total_sessions,target,status)").eq("student_id", student.id).is("archived_at", null);
+
+  const today = vietnamTodayString();
+  const { data: enrollments } = await supabase.from("enrollments").select("id,class_id,status,start_date,end_date,classes(id,code,name,total_sessions,target,status,start_date,expected_end_date)").eq("student_id", student.id).is("archived_at", null);
   const classIds = (enrollments || []).map((x: any) => x.class_id);
-  const [sessions, tuition, feedback, assignments, recentAttendance, myRatings] = await Promise.all([
-    classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,classes(code,name)").in("class_id", classIds).gte("scheduled_date", new Date().toISOString().slice(0,10)).order("scheduled_date").limit(8) : Promise.resolve({ data: [] as any[] }),
+  const activeEnrollments = (enrollments || []).filter((item: any) => {
+    const classRow = joinedClass(item.classes);
+    return item.status === "Active" || ["Active", "Ready", "Paused"].includes(String(classRow?.status || ""));
+  });
+  const completedEnrollments = (enrollments || []).filter((item: any) => {
+    const classRow = joinedClass(item.classes);
+    return item.status === "Completed" || ["Completed", "Closed"].includes(String(classRow?.status || ""));
+  });
+
+  const [upcomingSessions, recentSessions, tuition, feedback, assignments, recentAttendance, myRatings] = await Promise.all([
+    classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,classes(code,name)").in("class_id", classIds).gte("scheduled_date", today).is("archived_at", null).order("scheduled_date").order("start_time").limit(8) : Promise.resolve({ data: [] as any[] }),
+    classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,classes(code,name)").in("class_id", classIds).lt("scheduled_date", today).is("archived_at", null).order("scheduled_date", { ascending: false }).order("start_time", { ascending: false }).limit(8) : Promise.resolve({ data: [] as any[] }),
     supabase.from("tuition_accounts").select("id,package_name,balance_amount,renewal_due_date,status").eq("student_id", student.id).order("created_at", { ascending: false }).limit(3),
     supabase.from("progress_feedback").select("id,milestone,strengths,areas_to_improve,current_performance,recommendation,status,published_at,enrollments!inner(student_id,classes(code,name))").eq("enrollments.student_id", student.id).eq("status", "Published").order("published_at", { ascending: false }).limit(4),
     classIds.length ? supabase.from("assignments").select("id,title,due_at,max_score,class_id,classes(code),assignment_submissions(id,status,score,student_id)").in("class_id", classIds).not("published_at", "is", null).order("due_at").limit(8) : Promise.resolve({ data: [] as any[] }),
     supabase.from("attendance").select("session_id,status,sessions(id,session_no,scheduled_date,class_id,classes(code,name),session_teachers(teachers(id,full_name)))").eq("student_id", student.id).in("status", ["Present","Late","Joined partially"]).order("marked_at", { ascending: false }).limit(12),
     supabase.from("teacher_ratings").select("id,session_id,teacher_id,overall").eq("student_id", student.id)
   ]);
+
   return <>
     <PageHeader eyebrow="Student portal" title={`Xin chào ${student.full_name}`} description="Bạn chỉ có thể xem hồ sơ, lớp học, kết quả, feedback và học phí thuộc chính mình." />
     <Flash message={params.message} error={params.error} />
     <div className="metrics-grid">
-      <MetricCard label="Lớp đang học" value={enrollments?.length || 0} />
-      <MetricCard label="Buổi sắp tới" value={sessions.data?.length || 0} tone="yellow" />
+      <MetricCard label="Lớp đang học" value={activeEnrollments.length} note={`${completedEnrollments.length} lớp đã hoàn thành`} />
+      <MetricCard label="Buổi sắp tới" value={upcomingSessions.data?.length || 0} tone="yellow" />
       <MetricCard label="Feedback đã publish" value={feedback.data?.length || 0} tone="green" />
       <MetricCard label="Học phí còn lại" value={formatMoney((tuition.data || []).reduce((s: number,x: any)=>s+Number(x.balance_amount||0),0))} tone="red" />
     </div>
     <div className="grid-2">
       <Panel title="Lịch học sắp tới" description="Theo session">
-        {sessions.data?.length ? <div className="alert-list">{sessions.data.map((item: any) => <div className="alert-item" key={item.id}><i /><div><strong>{item.classes?.code} · Session {item.session_no}</strong><span>{formatDate(item.scheduled_date)} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><Status value={item.status} /></div>)}</div> : <Empty title="Chưa có lịch sắp tới" description="Lịch mới sẽ xuất hiện sau khi học vụ tạo session." />}
+        {upcomingSessions.data?.length ? <div className="alert-list">{upcomingSessions.data.map((item: any) => <div className="alert-item" key={item.id}><i /><div><strong>{joinedClass(item.classes)?.code} · Session {item.session_no}</strong><span>{formatDate(item.scheduled_date)} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><Status value={item.status} /></div>)}</div> : <Empty title="Chưa có lịch sắp tới" description={completedEnrollments.length ? "Các lớp hiện có đã kết thúc. Lịch mới sẽ xuất hiện khi bạn được enroll vào lớp active." : "Lịch mới sẽ xuất hiện sau khi học vụ tạo session."} />}
       </Panel>
       <Panel title="Bài tập cần xử lý" description="Upload file trực tiếp theo assignment">
-        {assignments.data?.length ? <div className="alert-list">{assignments.data.map((item: any) => { const own = (item.assignment_submissions || []).find((x: any)=>x.student_id===student.id); return <div className="alert-item" key={item.id}><i /><div><strong>{item.classes?.code} · {item.title}</strong><span>Hạn: {item.due_at ? new Date(item.due_at).toLocaleString("vi-VN") : "Không giới hạn"}</span>{(!own || own.status === "Revision required") ? <form action={submitAssignment} className="inline-form section-gap"><input type="hidden" name="assignment_id" value={item.id}/><input className="input" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx" required/><button className="button button-secondary">Nộp bài</button></form> : own.score != null ? <span>Điểm: {own.score}/{item.max_score}</span> : null}</div><Status value={own?.status || "Not submitted"} /></div>; })}</div> : <Empty title="Chưa có assignment" description="Bài tập đã publish sẽ hiển thị tại đây." />}
+        {assignments.data?.length ? <div className="alert-list">{assignments.data.map((item: any) => { const own = (item.assignment_submissions || []).find((x: any)=>x.student_id===student.id); return <div className="alert-item" key={item.id}><i /><div><strong>{joinedClass(item.classes)?.code} · {item.title}</strong><span>Hạn: {item.due_at ? new Date(item.due_at).toLocaleString("vi-VN") : "Không giới hạn"}</span>{(!own || own.status === "Revision required") ? <form action={submitAssignment} className="inline-form section-gap"><input type="hidden" name="assignment_id" value={item.id}/><input className="input" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx" required/><button className="button button-secondary">Nộp bài</button></form> : own.score != null ? <span>Điểm: {own.score}/{item.max_score}</span> : null}</div><Status value={own?.status || "Not submitted"} /></div>; })}</div> : <Empty title="Chưa có assignment" description="Workbook cũ không có dữ liệu bài tập; bài mới do giáo viên publish sẽ hiển thị tại đây." />}
       </Panel>
     </div>
+    <Panel className="section-gap" title="Lịch sử buổi học gần đây" description="Hiển thị cả buổi completed, cancelled và rescheduled">
+      {recentSessions.data?.length ? <div className="alert-list">{recentSessions.data.map((item: any) => <div className="alert-item" key={item.id}><i /><div><strong>{joinedClass(item.classes)?.code} · Session {item.session_no}</strong><span>{formatDate(item.scheduled_date)} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><Status value={item.status} /></div>)}</div> : <Empty title="Chưa có lịch sử session" description="Khi lớp phát sinh session, lịch sử sẽ xuất hiện ở đây." />}
+    </Panel>
     <Panel className="section-gap" title="Đánh giá giáo viên sau buổi học" description="Chỉ buổi có attendance Present, Late hoặc Joined partially mới được rate">
-      {recentAttendance.data?.length ? <div className="alert-list">{recentAttendance.data.map((record:any) => { const session = record.sessions; const teachers = session?.session_teachers || []; return teachers.map((link:any) => { const teacher = link.teachers; if (!teacher) return null; const existing = (myRatings.data || []).find((rating:any) => rating.session_id === record.session_id && rating.teacher_id === teacher.id); return <div className="alert-item" key={`${record.session_id}-${teacher.id}`}><i/><div><strong>{session?.classes?.code} · #{session?.session_no} · {teacher.full_name}</strong><span>{formatDate(session?.scheduled_date)} · Attendance {record.status}</span>{!existing ? <form action={rateTeacher} className="inline-form section-gap"><input type="hidden" name="session_id" value={record.session_id}/><input type="hidden" name="teacher_id" value={teacher.id}/>{["overall","clarity","engagement","supportiveness","pace"].map((name)=><label className="form-group" key={name}><span>{name}</span><select className="select" name={name} defaultValue="5" required>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label>)}<input className="input" name="comment" placeholder="Nhận xét (không bắt buộc)"/><button className="button button-secondary">Gửi rating</button></form> : <span>Đã đánh giá: {existing.overall}/5</span>}</div><Status value={existing ? "Submitted" : "Pending"}/></div>; }); })}</div> : <Empty title="Chưa có buổi đủ điều kiện đánh giá" description="Rating được mở sau khi attendance của buổi học được ghi nhận."/>}
+      {recentAttendance.data?.length ? <div className="alert-list">{recentAttendance.data.map((record:any) => { const session = record.sessions; const teachers = session?.session_teachers || []; return teachers.map((link:any) => { const teacher = link.teachers; if (!teacher) return null; const existing = (myRatings.data || []).find((rating:any) => rating.session_id === record.session_id && rating.teacher_id === teacher.id); return <div className="alert-item" key={`${record.session_id}-${teacher.id}`}><i/><div><strong>{session?.classes?.code} · #{session?.session_no} · {teacher.full_name}</strong><span>{formatDate(session?.scheduled_date)} · Attendance {record.status}</span>{!existing ? <form action={rateTeacher} className="inline-form section-gap"><input type="hidden" name="session_id" value={record.session_id}/><input type="hidden" name="teacher_id" value={teacher.id}/>{["overall","clarity","engagement","supportiveness","pace"].map((name)=><label className="form-group" key={name}><span>{name}</span><select className="select" name={name} defaultValue="5" required>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n}</option>)}</select></label>)}<input className="input" name="comment" placeholder="Nhận xét (không bắt buộc)"/><button className="button button-secondary">Gửi rating</button></form> : <span>Đã đánh giá: {existing.overall}/5</span>}</div><Status value={existing ? "Submitted" : "Pending"}/></div>; }); })}</div> : <Empty title="Chưa có buổi đủ điều kiện đánh giá" description="Workbook lịch cũ không chứa attendance; rating sẽ mở sau khi giáo viên điểm danh trong hệ thống."/>}
     </Panel>
   </>;
 }

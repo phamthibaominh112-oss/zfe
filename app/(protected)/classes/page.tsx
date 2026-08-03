@@ -12,11 +12,11 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
   const supabase = await createClient();
   const [{ data: classes, error }, { data: progressRows }, { data: programs }, { data: levels }] = await Promise.all([
     supabase.from("classes").select("id,code,name,category,mode,campus,start_date,expected_end_date,total_hours,total_sessions,target,capacity,status,programs(name),levels(name)").is("archived_at", null).order("created_at", { ascending: false }),
-    supabase.from("class_progress").select("class_id,completed_sessions,progress_percent"),
+    supabase.from("class_progress").select("id,completed_sessions,progress_percent"),
     supabase.from("programs").select("id,code,name").eq("is_active", true).order("name"),
     supabase.from("levels").select("id,code,name,program_id").eq("is_active", true).order("sequence_no")
   ]);
-  const progressByClass = new Map<string, any>((progressRows || []).map((row: any) => [row.class_id, row]));
+  const progressByClass = new Map<string, any>((progressRows || []).map((row: any) => [row.id, row]));
   const canManage = ["admin","academic_manager"].includes(profile.role);
 
   const actions = canManage ? <FormDetails title="Tạo lớp học"><form action={createClass}><FormGrid>
