@@ -27,7 +27,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
       <Field label="Email đăng nhập" name="email" type="email" required />
       <Field label="Mật khẩu tạm" name="password" type="password" min="8" required />
       <SelectField label="Role" name="role" required options={roleOptions} />
-      <SelectField label="Liên kết student profile có sẵn" name="link_student_id" options={(unlinkedStudents || []).map((row:any)=>({value:row.id,label:`${row.code} · ${row.full_name}`}))} />
+      <SelectField label="Liên kết hồ sơ học viên có sẵn" name="link_student_id" options={(unlinkedStudents || []).map((row:any)=>({value:row.id,label:`${row.code} · ${row.full_name}`}))} />
       <SelectField label="Liên kết teacher profile có sẵn" name="link_teacher_id" options={(unlinkedTeachers || []).map((row:any)=>({value:row.id,label:`${row.code} · ${row.full_name}`}))} />
       <div className="note-box form-span-2">Chỉ chọn profile liên kết phù hợp với role. Để trống nếu muốn hệ thống tạo profile mới.</div>
       <div className="form-actions"><button className="button button-primary">Tạo user</button></div>
@@ -35,7 +35,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   </FormDetails>;
 
   return <>
-    <PageHeader eyebrow="Administration" title="Users & Roles" description="Không có role switcher giả lập. Mỗi người dùng đăng nhập bằng Supabase Auth và chỉ nhận dữ liệu được RLS cho phép. Chỉ Admin có trang này." actions={actions}/>
+    <PageHeader eyebrow="Quản trị hệ thống" title="Tài khoản & phân quyền" description="Tạo tài khoản, gán vai trò và liên kết với hồ sơ giáo viên hoặc học viên." actions={actions}/>
     <Flash message={params.message} error={params.error || error?.message || authResult.error?.message}/>
     <Panel title="User directory" description={`${profiles?.length || 0} tài khoản trong hệ thống`}>
       {profiles?.length ? <div className="table-wrap"><table><thead><tr><th>Người dùng</th><th>Email</th><th>Role hiện tại</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Cập nhật quyền</th></tr></thead><tbody>
@@ -56,7 +56,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
             </form></details></td>
           </tr>;
         })}
-      </tbody></table></div> : <Empty title="Chưa có profile" description="Tạo user đầu tiên bằng bootstrap SQL, sau đó quản lý tài khoản tại đây."/>}
+      </tbody></table></div> : <Empty title="Chưa có tài khoản" description="Tạo tài khoản đầu tiên để bắt đầu phân quyền."/>}
     </Panel>
     <Panel title="Audit log gần nhất" description="INSERT / UPDATE / DELETE trên các bảng trọng yếu" className="section-gap">
       {auditLogs?.length ? <div className="table-wrap"><table><thead><tr><th>Thời gian</th><th>Action</th><th>Table</th><th>Record</th><th>Actor</th></tr></thead><tbody>{auditLogs.map((row:any)=><tr key={row.id}><td>{new Date(row.created_at).toLocaleString("vi-VN")}</td><td><Status value={row.action}/></td><td>{row.table_name}</td><td>{row.record_id || "—"}</td><td>{row.actor_id?.slice(0,8) || "system"}</td></tr>)}</tbody></table></div> : <Empty title="Chưa có audit event" description="Log sẽ xuất hiện sau khi có thay đổi dữ liệu."/>}

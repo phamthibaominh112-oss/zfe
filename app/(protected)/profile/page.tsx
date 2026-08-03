@@ -13,10 +13,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   const { data: student } = profile.role === "student" ? await supabase.from("students").select("id,code,full_name,email,phone,status,entry_level,target").eq("user_id", profile.id).maybeSingle() : { data: null };
 
   return <>
-    <PageHeader eyebrow="Account" title="Hồ sơ tài khoản" description="Bạn có thể đổi tên hiển thị. Role và quyền truy cập chỉ do Admin quản lý."/>
+    <PageHeader eyebrow="Tài khoản" title="Hồ sơ tài khoản" description="Cập nhật tên hiển thị và xem thông tin hồ sơ được liên kết với tài khoản."/>
     <Flash message={params.message} error={params.error}/>
     <div className="grid-2">
-      <Panel title="Thông tin đăng nhập" description="Profile được liên kết với Supabase Auth">
+      <Panel title="Thông tin đăng nhập" description="Thông tin tài khoản đang sử dụng">
         <div className="profile-grid">
           <div className="profile-item"><span>Họ tên</span><strong>{profile.full_name}</strong></div>
           <div className="profile-item"><span>Role</span><strong>{ROLE_LABELS[profile.role]}</strong></div>
@@ -29,6 +29,6 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       </Panel>
     </div>
     {teacher ? <Panel title="Teacher profile" description="Chỉ profile giáo viên của chính tài khoản này" className="section-gap"><div className="profile-grid"><div className="profile-item"><span>Mã GV</span><strong>{teacher.code}</strong></div><div className="profile-item"><span>Loại hợp đồng</span><strong>{teacher.employment_status || "—"}</strong></div><div className="profile-item"><span>Hourly rate</span><strong>{Number(teacher.hourly_rate || 0).toLocaleString("vi-VN")} đ</strong></div><div className="profile-item"><span>Skills</span><strong>{(teacher.specialization || []).join(", ") || "—"}</strong></div></div></Panel> : null}
-    {student ? <Panel title="Student profile" description="Chỉ hồ sơ học viên được liên kết với tài khoản này" className="section-gap"><div className="profile-grid"><div className="profile-item"><span>Mã học viên</span><strong>{student.code}</strong></div><div className="profile-item"><span>Trạng thái</span><Status value={student.status}/></div><div className="profile-item"><span>Entry level</span><strong>{student.entry_level || "—"}</strong></div><div className="profile-item"><span>Target</span><strong>{student.target || "—"}</strong></div></div></Panel> : null}
+    {student ? <Panel title="Hồ sơ học viên" description="Thông tin học tập gắn với tài khoản này" className="section-gap"><div className="profile-grid"><div className="profile-item"><span>Mã học viên</span><strong>{student.code}</strong></div><div className="profile-item"><span>Trạng thái</span><Status value={student.status}/></div><div className="profile-item"><span>Trình độ đầu vào</span><strong>{student.entry_level || "—"}</strong></div><div className="profile-item"><span>Mục tiêu</span><strong>{student.target || "—"}</strong></div></div></Panel> : null}
   </>;
 }

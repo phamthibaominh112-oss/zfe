@@ -35,12 +35,12 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
 
   const avgRating = ratings.data?.length ? (ratings.data.reduce((sum:number,x:any)=>sum+Number(x.overall||0),0)/ratings.data.length).toFixed(2) : "—";
   return <>
-    <PageHeader eyebrow="Academic quality assurance" title="Teacher Quality" description={profile.role === "teacher" ? "Bạn chỉ xem được observation của chính mình sau khi Academic share. Raw student ratings và dữ liệu giáo viên khác bị chặn." : "Observation gắn với session thật, rubric scores, coaching action và rating trend của học viên."} actions={actions}/>
+    <PageHeader eyebrow="Kiểm soát chất lượng" title="Chất lượng giảng dạy" description={profile.role === "teacher" ? "Xem kết quả dự giờ, điểm mạnh và nội dung cần cải thiện của chính bạn." : "Theo dõi dự giờ, rubric, kế hoạch coaching và xu hướng đánh giá từ học viên."} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
     {manager ? <div className="metrics-grid">
       <article className="metric-card metric-blue"><span>Observations</span><strong>{observations.data?.length || 0}</strong><small>Trong danh sách gần nhất</small></article>
       <article className="metric-card metric-yellow"><span>Student rating average</span><strong>{avgRating}</strong><small>Raw rating chỉ Academic/Admin được đọc</small></article>
-      <article className="metric-card metric-green"><span>Shared reports</span><strong>{observations.data?.filter((x:any)=>x.shared_at).length || 0}</strong><small>Giáo viên đã có thể xem</small></article>
+      <article className="metric-card metric-green"><span>Đã chia sẻ reports</span><strong>{observations.data?.filter((x:any)=>x.shared_at).length || 0}</strong><small>Giáo viên đã có thể xem</small></article>
       <article className="metric-card metric-red"><span>Follow-up due</span><strong>{observations.data?.filter((x:any)=>x.follow_up_due_at && x.follow_up_due_at <= new Date().toISOString().slice(0,10)).length || 0}</strong><small>Coaching action đến hạn</small></article>
     </div> : null}
     <Panel title={profile.role === "teacher" ? "Đánh giá của tôi" : "Observation records"} description="Mỗi record có rubric, tổng điểm, strengths và action plan">
@@ -49,7 +49,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
         <div className="card-meta"><span className="chip chip-blue">Score {item.total_score ?? "—"}/100</span><span className="chip">{item.observation_templates?.name}</span>{item.follow_up_due_at ? <span className="chip chip-yellow">Follow-up {formatDate(item.follow_up_due_at)}</span> : null}</div>
         <div className="detail-list section-gap"><div className="detail-row"><span>Strengths</span><strong>{item.strengths || "—"}</strong></div><div className="detail-row"><span>Improve</span><strong>{item.areas_to_improve || "—"}</strong></div><div className="detail-row"><span>Actions</span><strong>{item.required_actions || "—"}</strong></div></div>
         <details className="section-gap"><summary className="button button-secondary">Xem rubric</summary><div className="alert-list section-gap">{(item.observation_scores||[]).map((score:any)=><div className="alert-item" key={score.observation_criteria?.label}><i/><div><strong>{score.observation_criteria?.label}</strong><span>{score.note || "Không có ghi chú"}</span></div><strong>{score.score}/{score.observation_criteria?.max_score}</strong></div>)}</div></details>
-        <div className="card-footer"><span>{formatDateTime(item.created_at)}</span><span>{item.shared_at ? `Shared ${formatDateTime(item.shared_at)}` : "Not shared"}</span></div>
+        <div className="card-footer"><span>{formatDateTime(item.created_at)}</span><span>{item.shared_at ? `Đã chia sẻ ${formatDateTime(item.shared_at)}` : "Chưa chia sẻ"}</span></div>
       </article>)}</div> : <Empty title="Chưa có observation" description={profile.role === "teacher" ? "Academic chưa share observation nào cho bạn." : "Tạo observation đầu tiên bằng rubric chuẩn."}/>} 
     </Panel>
     {manager ? <Panel className="section-gap" title="Student ratings" description="Anonymous to teachers; Academic Manager sees records for quality control">

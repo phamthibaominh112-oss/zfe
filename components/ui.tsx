@@ -12,18 +12,47 @@ export function Panel({ title, description, action, children, className = "" }: 
   return <section className={`panel ${className}`}><div className="panel-header"><div><h2>{title}</h2>{description ? <p>{description}</p> : null}</div>{action ? <div className="panel-actions">{action}</div> : null}</div><div className="panel-body">{children}</div></section>;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  active: "Đang hoạt động",
+  completed: "Hoàn thành",
+  approved: "Đã duyệt",
+  published: "Đã gửi",
+  present: "Có mặt",
+  paid: "Đã thanh toán",
+  pending: "Đang chờ",
+  scheduled: "Đã xếp lịch",
+  submitted: "Đã gửi",
+  draft: "Bản nháp",
+  ready: "Sẵn sàng",
+  late: "Trễ",
+  overdue: "Quá hạn",
+  cancelled: "Đã huỷ",
+  canceled: "Đã huỷ",
+  absent: "Vắng",
+  rejected: "Không duyệt",
+  paused: "Tạm dừng",
+  "revision required": "Cần chỉnh sửa",
+  partial: "Chưa hoàn tất",
+  "joined partially": "Tham gia một phần",
+  matched: "Đã phân công",
+  "not submitted": "Chưa nộp",
+  closed: "Đã đóng",
+  processing: "Đang xử lý"
+};
+
 export function Status({ value }: { value: string | null | undefined }) {
-  const normalized = String(value || "").toLowerCase();
-  const tone = normalized.includes("active") || normalized.includes("completed") || normalized.includes("approved") || normalized.includes("published") || normalized.includes("present") || normalized.includes("paid")
+  const raw = String(value || "");
+  const normalized = raw.toLowerCase();
+  const tone = normalized.includes("active") || normalized.includes("completed") || normalized.includes("approved") || normalized.includes("published") || normalized.includes("present") || normalized.includes("paid") || normalized.includes("matched")
     ? "green"
-    : normalized.includes("pending") || normalized.includes("scheduled") || normalized.includes("submitted") || normalized.includes("draft")
+    : normalized.includes("pending") || normalized.includes("scheduled") || normalized.includes("submitted") || normalized.includes("draft") || normalized.includes("ready")
       ? "blue"
       : normalized.includes("risk") || normalized.includes("late") || normalized.includes("overdue") || normalized.includes("cancel") || normalized.includes("absent") || normalized.includes("rejected")
         ? "red"
-        : normalized.includes("pause") || normalized.includes("revision") || normalized.includes("partial")
+        : normalized.includes("pause") || normalized.includes("revision") || normalized.includes("partial") || normalized.includes("not submitted")
           ? "yellow"
           : "neutral";
-  return <span className={`status status-${tone}`}>{value || "—"}</span>;
+  return <span className={`status status-${tone}`}>{STATUS_LABELS[normalized] || value || "—"}</span>;
 }
 
 export function Flash({ message, error }: { message?: string; error?: string }) {

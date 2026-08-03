@@ -8,21 +8,21 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="auth-logo"><img src="/zest-logo.png" alt="ZEST for English" /></div>
         <p className="eyebrow">ZEST for English</p>
         <h1>ZE CenterOS</h1>
-        <p>Nền tảng quản lý vận hành trung tâm: lớp học, lịch, học viên, chất lượng, học phí và tái phí trên cùng một database.</p>
+        <p>Nền tảng quản lý lịch học, lớp, học viên, chất lượng và học phí tại một nơi.</p>
         <div className="auth-feature-grid">
-          <div><strong>RBAC thật</strong><span>Mỗi tài khoản chỉ thấy dữ liệu đúng vai trò.</span></div>
-          <div><strong>Database thật</strong><span>Supabase PostgreSQL, Auth, Storage và RLS.</span></div>
-          <div><strong>Audit trail</strong><span>Không xoá ngoài Admin; mọi thay đổi quan trọng được lưu.</span></div>
+          <div><strong>Lịch rõ ràng</strong><span>Xem nhanh lịch hôm nay và kế hoạch trong tuần.</span></div>
+          <div><strong>Đúng vai trò</strong><span>Mỗi người có workspace phù hợp với công việc.</span></div>
+          <div><strong>Một nơi duy nhất</strong><span>Lớp học, tiến độ, chất lượng và học phí được kết nối.</span></div>
         </div>
       </section>
       <section className="auth-card">
         <div>
-          <span className="auth-kicker">Secure workspace</span>
+          <span className="auth-kicker">ZE CenterOS</span>
           <h2>Đăng nhập hệ thống</h2>
           <p>Dùng tài khoản do Admin trung tâm cấp.</p>
         </div>
         {params.message ? <div className="message success">Mật khẩu đã được cập nhật. Vui lòng đăng nhập lại.</div> : null}
-        {params.error ? <div className="message error">{params.error === "account_not_ready" ? "Tài khoản chưa được cấu hình role hoặc đang bị khoá." : params.error}</div> : null}
+        {params.error ? <div className="message error">{params.error === "account_not_ready" ? "Tài khoản chưa được phân quyền hoặc đang bị khoá." : params.error}</div> : null}
         <form action={signIn} className="form-stack">
           <input type="hidden" name="next" value={params.next || "/dashboard"} />
           <label>Email<input name="email" type="email" autoComplete="email" required /></label>

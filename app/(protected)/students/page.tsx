@@ -34,7 +34,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
   </FormGrid></form></FormDetails> : undefined;
 
   return <>
-    <PageHeader eyebrow="Student master database" title="Hồ sơ học viên" description={profile.role === "teacher" ? "Giáo viên chỉ thấy học viên thuộc lớp mình được phân công; thông tin học phí và renewal không được truy vấn." : "Một học viên có một master profile và có thể có nhiều enrollment, payment, assessment và feedback."} actions={actions} />
+    <PageHeader eyebrow="Quản lý học viên" title="Hồ sơ học viên" description={profile.role === "teacher" ? "Danh sách học viên thuộc các lớp bạn đang phụ trách." : "Theo dõi hồ sơ, trình độ, mục tiêu và trạng thái học tập của từng học viên."} actions={actions} />
     <Flash message={params.message} error={params.error || error?.message} />
     <Panel title="Student directory" description={`${students?.length || 0} hồ sơ có quyền truy cập`}>
       {students?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Mã</th><th>Học viên</th><th>Level / Target</th>{profile.role !== "teacher" ? <><th>Liên hệ</th><th>Nguồn</th></> : null}<th>Trạng thái</th><th></th></tr></thead><tbody>
@@ -46,7 +46,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           <td><Status value={student.status} /></td>
           <td><div className="row-actions"><Link className="button button-secondary" href={`/students/${student.id}`}>Mở profile</Link>{profile.role === "admin" ? <form action={archiveStudent}><input type="hidden" name="student_id" value={student.id}/><button className="button button-danger" type="submit">Archive</button></form> : null}</div></td>
         </tr>)}
-      </tbody></table></div> : <Empty title="Chưa có học viên" description="Tạo hồ sơ đầu tiên hoặc kiểm tra RLS của tài khoản hiện tại." />}
+      </tbody></table></div> : <Empty title="Chưa có học viên" description="Tạo hồ sơ học viên đầu tiên để bắt đầu quản lý." />}
     </Panel>
   </>;
 }

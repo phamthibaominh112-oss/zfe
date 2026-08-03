@@ -85,7 +85,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
   </div>;
 
   return <>
-    <PageHeader eyebrow="Student profile" title={`${student.code} · ${student.full_name}`} description={profile.role === "teacher" ? "Academic-only view. Học phí, payment và renewal bị chặn ở cả UI lẫn RLS." : "Master profile liên kết enrollment, lịch, chất lượng học tập và tài chính theo đúng quyền role."} actions={actions} />
+    <PageHeader eyebrow="Hồ sơ học viên" title={`${student.code} · ${student.full_name}`} description={profile.role === "teacher" ? "Theo dõi lớp học, điểm danh, bài tập và kết quả học tập." : "Thông tin tổng hợp về lớp học, tiến độ, lịch và học phí của học viên."} actions={actions} />
     <Flash message={messages.message} error={messages.error} />
 
     <Panel title="Thông tin tổng quan" description="Dữ liệu hồ sơ gốc">
@@ -93,7 +93,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
         <div className="profile-item"><span>Trạng thái</span><strong><Status value={student.status}/></strong></div>
         <div className="profile-item"><span>Level đầu vào</span><strong>{student.entry_level || "—"}</strong></div>
         <div className="profile-item"><span>Target</span><strong>{student.target || "—"}</strong></div>
-        <div className="profile-item"><span>Số enrollment</span><strong>{enrollments?.length || 0}</strong></div>
+        <div className="profile-item"><span>Số lớp tham gia</span><strong>{enrollments?.length || 0}</strong></div>
         {profile.role !== "teacher" ? <>
           <div className="profile-item"><span>Điện thoại</span><strong>{(student as any).phone || "—"}</strong></div>
           <div className="profile-item"><span>Email</span><strong>{(student as any).email || "—"}</strong></div>
@@ -104,15 +104,15 @@ export default async function StudentDetailPage({ params, searchParams }: { para
     </Panel>
 
     <div className="grid-2 section-gap">
-      <Panel title="Enrollment & lộ trình" description="Một student profile có thể tham gia nhiều lớp">
-        {enrollments?.length ? <div className="alert-list">{enrollments.map((item: any) => <div className="alert-item" key={item.id}><i/><div><strong>{item.classes?.code} · {item.classes?.name}</strong><span>{item.classes?.category} · {item.classes?.mode} · Target: {item.target || item.classes?.target || "—"}</span></div><Status value={item.status}/></div>)}</div> : <Empty title="Chưa có enrollment" description="Academic Manager sẽ xếp học viên vào lớp phù hợp." />}
+      <Panel title="Lớp học & lộ trình" description="Các lớp học viên đang hoặc đã tham gia">
+        {enrollments?.length ? <div className="alert-list">{enrollments.map((item: any) => <div className="alert-item" key={item.id}><i/><div><strong>{item.classes?.code} · {item.classes?.name}</strong><span>{item.classes?.category} · {item.classes?.mode} · Target: {item.target || item.classes?.target || "—"}</span></div><Status value={item.status}/></div>)}</div> : <Empty title="Chưa được xếp lớp" description="Học vụ sẽ xếp học viên vào lớp phù hợp." />}
       </Panel>
       <Panel title="Lịch học sắp tới" description="Session-level schedule">
         {upcomingSessions.data?.length ? <div className="alert-list">{upcomingSessions.data.map((item: any) => <div className="alert-item" key={item.id}><i/><div><strong>{item.classes?.code} · Session {item.session_no}</strong><span>{formatDate(item.scheduled_date)} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><Status value={item.status}/></div>)}</div> : <Empty title="Chưa có lịch" description="Session mới sẽ xuất hiện sau khi học vụ tạo lịch." />}
       </Panel>
     </div>
 
-    {["admin","academic_manager","customer_service","student"].includes(profile.role) ? <Panel className="section-gap" title="Lịch rảnh học viên" description="Dùng để match lịch lớp và giáo viên">
+    {["admin","academic_manager","customer_service","student"].includes(profile.role) ? <Panel className="section-gap" title="Lịch rảnh học viên" description="Dùng để tìm khung giờ học phù hợp">
       {availability.data?.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Ngày</th><th>Khung giờ</th><th>Hiệu lực</th><th>Lặp</th><th>Ghi chú</th></tr></thead><tbody>{availability.data.map((item: any) => <tr key={item.id}><td>{WEEKDAYS.find(x=>x.value===String(item.weekday))?.label}</td><td>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</td><td>{formatDate(item.effective_from)} → {formatDate(item.effective_to)}</td><td>{item.is_recurring ? "Hàng tuần" : "Một lần"}</td><td>{item.note || "—"}</td></tr>)}</tbody></table></div> : <Empty title="Chưa khai báo lịch rảnh" description="CSKH hoặc Học vụ có thể thêm lịch rảnh cho học viên." />}
     </Panel> : null}
 
