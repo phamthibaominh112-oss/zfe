@@ -62,6 +62,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const upcoming = (weekSessions.data || []).filter((item: any) => item.scheduled_date >= today && !String(item.status).toLowerCase().includes("cancel"));
     const nextSession = upcoming[0];
     const nextClass = joined(nextSession?.classes);
+    let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0 };
+    if (profile.role === "admin") {
+      const monthStart = `${today.slice(0,7)}-01`;
+      const nextMonthDate = new Date(`${monthStart}T00:00:00Z`);
+      nextMonthDate.setUTCMonth(nextMonthDate.getUTCMonth()+1);
+      const monthEnd = nextMonthDate.toISOString().slice(0,10);
+      const next14Date = vietnamTodayDate();
+      next14Date.setUTCDate(next14Date.getUTCDate()+14);
+      const [monthPayments, monthExpenses, tuitionRows, renewalRows] = await Promise.all([
+        supabase.from("payment_transactions").select("amount").gte("paid_at", `${monthStart}T00:00:00Z`).lt("paid_at", `${monthEnd}T00:00:00Z`),
+        supabase.from("expense_transactions").select("amount").gte("expense_date", monthStart).lt("expense_date", monthEnd).is("archived_at", null).neq("status", "Void"),
+        supabase.from("tuition_accounts").select("balance_amount").is("archived_at", null),
+        supabase.from("tuition_accounts").select("id", { count: "exact", head: true }).gte("renewal_due_date", today).lte("renewal_due_date", dateOnlyString(next14Date)).is("archived_at", null)
+      ]);
+      adminFinance = {
+        revenue: (monthPayments.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
+        expenses: (monthExpenses.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
+        outstanding: (tuitionRows.data || []).reduce((sum:number,row:any)=>sum+Number(row.balance_amount||0),0),
+        renewalAlerts: renewalRows.count || 0
+      };
+    }
 
     return <>
       <PageHeader eyebrow="Trung tâm hôm nay" title={`Chào ${profile.full_name}`} description="Lịch học, việc cần xử lý và các chỉ số quan trọng được gom vào một nơi." />
@@ -96,6 +117,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
         </Panel>
       </div>
+      {profile.role === "admin" ? <Panel className="section-gap" title="Tài chính tháng này" description="Thu, chi, công nợ và cảnh báo tái phí" action={<Link className="text-link" href="/finance/reports">Mở báo cáo →</Link>}>
+        <div className="metrics-grid compact-metrics">
+          <MetricCard label="Đã thu" value={formatMoney(adminFinance.revenue)} tone="green" />
+          <MetricCard label="Đã chi" value={formatMoney(adminFinance.expenses)} tone="red" />
+          <MetricCard label="Chênh lệch" value={formatMoney(adminFinance.revenue-adminFinance.expenses)} tone={adminFinance.revenue-adminFinance.expenses>=0?"blue":"red"} />
+          <MetricCard label="Tái phí 14 ngày" value={adminFinance.renewalAlerts} tone="yellow" />
+        </div>
+        <div className="quick-actions-grid section-gap">
+          <QuickAction href="/finance" icon="₫" title="Thu phí & phiếu thu" description="Giao dịch, công nợ và thông báo" />
+          <QuickAction href="/finance/expenses" icon="−" title="Ghi nhận chi phí" description="Cố định, biến đổi và lương" tone="yellow" />
+          <QuickAction href="/finance/reports" icon="↗" title="Báo cáo thu chi" description={`Công nợ ${formatMoney(adminFinance.outstanding)}`} tone="green" />
+        </div>
+      </Panel> : null}
     </>;
   }
 

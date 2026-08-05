@@ -37,7 +37,16 @@ const STATUS_LABELS: Record<string, string> = {
   matched: "Đã phân công",
   "not submitted": "Chưa nộp",
   closed: "Đã đóng",
-  processing: "Đang xử lý"
+  processing: "Đang xử lý",
+  "partially paid": "Đã thanh toán một phần",
+  unread: "Chưa đọc",
+  read: "Đã đọc",
+  issued: "Đã phát hành",
+  void: "Đã huỷ",
+  contacted: "Đã liên hệ",
+  "call back": "Hẹn liên hệ lại",
+  renewed: "Đã tái phí",
+  "not renewing": "Không tái phí"
 };
 
 export function Status({ value }: { value: string | null | undefined }) {

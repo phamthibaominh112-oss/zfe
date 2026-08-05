@@ -33,7 +33,8 @@ Tạo project mới. Trong SQL Editor, chạy lần lượt:
 
 1. `supabase/migrations/001_schema.sql`
 2. `supabase/migrations/002_rls.sql`
-3. `supabase/migrations/003_storage_and_seed.sql`
+3. `supabase/migrations/003_storage_and_seed.sql
+4. `supabase/migrations/004_schedule_management.sql` — quyền điều chỉnh/xóa lịch GV cho Admin và Quản lý học vụ`
 
 ### 2. Tạo Admin đầu tiên
 
@@ -132,3 +133,19 @@ Version 1.0.4 no longer returns a generic 500 when Vercel environment variables 
 The application redirects to `/setup`, where the operator can see which required variable names
 are missing without exposing any secret values. After the required variables are present, `/setup`
 redirects to `/login`.
+
+## v1.2.0 — Finance, Accounting & Notifications
+
+Run `supabase/migrations/005_finance_accounting_notifications.sql` before deploying the v1.2.0 code update.
+
+New production modules:
+
+- CSKH payment recording, printable receipts and renewal follow-ups.
+- Automatic student notification when a payment is recorded.
+- Manual and bulk renewal notifications.
+- Admin-only fixed, variable, payroll, commission and other expense ledger.
+- Teacher payroll estimate from completed teaching hours and hourly rate.
+- Six-month income/expense management report.
+- Automatic tuition usage tracking from completed sessions.
+
+The notification center is an authenticated in-app notification channel. Native browser/phone push requires a separate Web Push provider and VAPID configuration.

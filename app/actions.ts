@@ -926,3 +926,151 @@ export async function updateRenewalFollowup(formData: FormData) {
   revalidatePath("/finance");
   go("/finance", "Đã cập nhật follow-up tái phí.");
 }
+
+// v1.2.0 — Finance, expense accounting, receipts and notifications
+export async function createExpense(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("expense_transactions").insert({
+    category_id: text(formData.get("category_id")),
+    expense_date: text(formData.get("expense_date")) || new Date().toISOString().slice(0, 10),
+    amount: toNumber(formData.get("amount")),
+    vendor: text(formData.get("vendor")) || null,
+    description: text(formData.get("description")),
+    payment_method: text(formData.get("payment_method")) || null,
+    reference: text(formData.get("reference")) || null,
+    status: text(formData.get("status")) || "Paid",
+    teacher_id: text(formData.get("teacher_id")) || null,
+    payroll_month: text(formData.get("payroll_month")) || null,
+    receipt_url: text(formData.get("receipt_url")) || null,
+    created_by: profile.id,
+    approved_by: profile.id,
+    approved_at: new Date().toISOString()
+  });
+  if (error) go("/finance/expenses", undefined, error.message);
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  revalidatePath("/dashboard");
+  go("/finance/expenses", "Đã ghi nhận chi phí.");
+}
+
+export async function updateExpense(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("expense_transactions").update({
+    category_id: text(formData.get("category_id")),
+    expense_date: text(formData.get("expense_date")),
+    amount: toNumber(formData.get("amount")),
+    vendor: text(formData.get("vendor")) || null,
+    description: text(formData.get("description")),
+    payment_method: text(formData.get("payment_method")) || null,
+    reference: text(formData.get("reference")) || null,
+    status: text(formData.get("status")) || "Paid",
+    receipt_url: text(formData.get("receipt_url")) || null,
+    approved_by: profile.id,
+    approved_at: new Date().toISOString()
+  }).eq("id", text(formData.get("expense_id")));
+  if (error) go("/finance/expenses", undefined, error.message);
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  go("/finance/expenses", "Đã cập nhật chi phí.");
+}
+
+export async function archiveExpense(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("expense_transactions").update({
+    archived_at: new Date().toISOString(),
+    archived_by: profile.id,
+    status: "Void"
+  }).eq("id", text(formData.get("expense_id")));
+  if (error) go("/finance/expenses", undefined, error.message);
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  go("/finance/expenses", "Đã huỷ và lưu trữ khoản chi. Dữ liệu vẫn được giữ trong audit log.");
+}
+
+export async function postTeacherPayrollExpense(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const teacherId = text(formData.get("teacher_id"));
+  const payrollMonth = text(formData.get("payroll_month"));
+  const [{ data: payroll, error: payrollError }, { data: category, error: categoryError }] = await Promise.all([
+    supabase.from("teacher_payroll_monthly").select("teacher_id,teacher_code,teacher_name,payroll_month,completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacherId).eq("payroll_month", payrollMonth).maybeSingle(),
+    supabase.from("finance_categories").select("id").eq("code", "PAYROLL_TEACHER").single()
+  ]);
+  if (payrollError || categoryError || !payroll || !category) {
+    go("/finance/expenses", undefined, payrollError?.message || categoryError?.message || "Không tìm thấy dữ liệu lương giáo viên.");
+  }
+  const sourceKey = `teacher-payroll:${teacherId}:${payrollMonth}`;
+  const { error } = await supabase.from("expense_transactions").upsert({
+    category_id: category.id,
+    expense_date: `${payrollMonth.slice(0, 7)}-01`,
+    amount: Number(payroll.estimated_payroll || 0),
+    vendor: payroll.teacher_name,
+    description: `Lương GV ${payroll.teacher_name} · ${Number(payroll.completed_hours || 0).toLocaleString("vi-VN")} giờ × ${Number(payroll.hourly_rate || 0).toLocaleString("vi-VN")} đ`,
+    payment_method: "Payroll",
+    status: "Approved",
+    teacher_id: teacherId,
+    payroll_month: payrollMonth,
+    source_key: sourceKey,
+    created_by: profile.id,
+    approved_by: profile.id,
+    approved_at: new Date().toISOString(),
+    archived_at: null,
+    archived_by: null
+  }, { onConflict: "source_key" });
+  if (error) go("/finance/expenses", undefined, error.message);
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  go("/finance/expenses", "Đã ghi nhận chi phí lương giáo viên. Chạy lại sẽ cập nhật thay vì tạo trùng.");
+}
+
+export async function sendFinanceNotification(formData: FormData) {
+  await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("send_student_finance_notification", {
+    p_student_id: text(formData.get("student_id")),
+    p_kind: text(formData.get("kind")) || "finance_notice",
+    p_title: text(formData.get("title")),
+    p_body: text(formData.get("body")),
+    p_action_url: text(formData.get("action_url")) || "/finance",
+    p_priority: text(formData.get("priority")) || "Normal",
+    p_dedupe_key: text(formData.get("dedupe_key")) || null
+  });
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/notifications");
+  revalidatePath("/dashboard");
+  go("/finance", "Đã gửi thông báo vào tài khoản học viên.");
+}
+
+export async function generateRenewalNotifications(formData: FormData) {
+  await requireRole(["admin", "customer_service"]);
+  const supabase = await createClient();
+  const days = toNumber(formData.get("days"), 14);
+  const { data, error } = await supabase.rpc("generate_renewal_notifications", { p_days: days });
+  if (error) go("/finance", undefined, error.message);
+  revalidatePath("/notifications");
+  go("/finance", `Đã tạo/cập nhật ${Number(data || 0)} thông báo tái phí.`);
+}
+
+export async function markNotificationRead(formData: FormData) {
+  await requireProfile();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: text(formData.get("notification_id")) });
+  if (error) go("/notifications", undefined, error.message);
+  revalidatePath("/notifications");
+  revalidatePath("/dashboard");
+  const returnTo = text(formData.get("return_to"));
+  go(returnTo.startsWith("/") ? returnTo : "/notifications", "Đã đánh dấu thông báo là đã đọc.");
+}
+
+export async function markAllNotificationsRead(_formData: FormData) {
+  await requireProfile();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_all_notifications_read");
+  if (error) go("/notifications", undefined, error.message);
+  revalidatePath("/notifications");
+  revalidatePath("/dashboard");
+  go("/notifications", "Đã đánh dấu tất cả thông báo là đã đọc.");
+}

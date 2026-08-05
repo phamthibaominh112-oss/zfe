@@ -12,7 +12,8 @@ const required = [
   "supabase/migrations/001_schema.sql",
   "supabase/migrations/002_rls.sql",
   "supabase/migrations/003_storage_and_seed.sql",
-  "supabase/migrations/004_schedule_management.sql"
+  "supabase/migrations/004_schedule_management.sql",
+  "supabase/migrations/005_finance_accounting_notifications.sql"
 ];
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing ${file}`);
@@ -45,6 +46,10 @@ for (const marker of [
 const scheduleMigration = read("supabase/migrations/004_schedule_management.sql");
 for (const marker of ["teacher_availability_delete", "session_teachers_delete", "public.is_academic_manager()"])
   if (!scheduleMigration.includes(marker)) failures.push(`Missing schedule management marker: ${marker}`);
+
+const financeMigration = read("supabase/migrations/005_finance_accounting_notifications.sql");
+for (const marker of ["expense_transactions", "payment_receipts", "notifications", "generate_renewal_notifications", "teacher_payroll_monthly"])
+  if (!financeMigration.includes(marker)) failures.push(`Missing finance/accounting marker: ${marker}`);
 
 for (const file of ["app/(protected)/students/page.tsx", "app/(protected)/students/[id]/page.tsx"]) {
   if (/\.select\(select\)/.test(read(file))) failures.push(`Dynamic Supabase select remains in ${file}`);

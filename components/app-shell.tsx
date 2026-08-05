@@ -6,7 +6,7 @@ import { useState } from "react";
 import { NAV_ITEMS, ROLE_LABELS, type Profile } from "@/lib/roles";
 import { signOut } from "@/app/auth-actions";
 
-export function AppShell({ profile, children }: { profile: Profile; children: React.ReactNode }) {
+export function AppShell({ profile, unreadNotifications, children }: { profile: Profile; unreadNotifications: number; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const visible = NAV_ITEMS[profile.role];
@@ -58,6 +58,7 @@ export function AppShell({ profile, children }: { profile: Profile; children: Re
           </div>
           <div className="topbar-actions">
             <Link className="topbar-button topbar-schedule" href="/schedule">◷ Xem lịch tuần</Link>
+            <Link className="topbar-button notification-button" href="/notifications" aria-label="Thông báo">🔔<span>Thông báo</span>{unreadNotifications > 0 ? <b>{unreadNotifications > 99 ? "99+" : unreadNotifications}</b> : null}</Link>
             <Link className="topbar-button" href="/profile">Hồ sơ</Link>
           </div>
         </header>
