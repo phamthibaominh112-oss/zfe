@@ -1,4 +1,4 @@
-import { createSession, createTeacherAvailability } from "@/app/actions";
+import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, updateSessionSchedule, updateTeacherAvailability } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
@@ -30,7 +30,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
   const [sessions, availability, studentAvailability, teachers, classes, students] = await Promise.all([
-    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
+    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("teachers").select("id,code,full_name").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
@@ -102,7 +102,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length} buổi</small></div>
             <div className="day-events">{items.length ? items.map((item:any)=>{
               const classRow = joined(item.classes);
-              const teacherText = (item.session_teachers||[]).map((x:any)=>joined(x.teachers)?.full_name).filter(Boolean).join(", ") || "Chưa phân GV";
+              const teacherLinks = item.session_teachers || [];
+              const teacherText = teacherLinks.map((x:any)=>joined(x.teachers)?.full_name).filter(Boolean).join(", ") || "Chưa phân GV";
+              const mainTeacherLink = teacherLinks.find((x:any)=>x.role === "Main teacher") || teacherLinks[0];
+              const mainTeacher = joined(mainTeacherLink?.teachers);
               return <article className={`session-card ${item.mode === "Offline" ? "offline" : ""}`} key={item.id}>
                 <div className="session-time-row"><strong>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</strong><span>{item.duration_hours}h</span></div>
                 <h3>{classRow?.code || "Lớp"} · Buổi {item.session_no}</h3>
@@ -110,6 +113,33 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 <small>{teacherText}</small>
                 <div className="session-footer"><span className={`mode-dot ${item.mode === "Offline" ? "offline" : ""}`}>{item.mode}</span><Status value={item.status}/></div>
                 {profile.role === "student" && item.meeting_url ? <a className="session-link" href={item.meeting_url} target="_blank" rel="noreferrer">Vào lớp online →</a> : null}
+                {canManage ? <details className="session-manage-details">
+                  <summary>Điều chỉnh lịch</summary>
+                  <div className="session-manage-body">
+                    <form action={updateSessionSchedule}><input type="hidden" name="session_id" value={item.id}/><FormGrid>
+                      <Field label="Số buổi" name="session_no" type="number" required defaultValue={item.session_no}/>
+                      <Field label="Ngày dạy" name="scheduled_date" type="date" required defaultValue={item.scheduled_date}/>
+                      <Field label="Bắt đầu" name="start_time" type="time" required defaultValue={item.start_time?.slice(0,5)}/>
+                      <Field label="Kết thúc" name="end_time" type="time" required defaultValue={item.end_time?.slice(0,5)}/>
+                      <Field label="Số giờ" name="duration_hours" type="number" step="0.25" required defaultValue={item.duration_hours}/>
+                      <SelectField label="Hình thức" name="mode" required defaultValue={item.mode} options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/>
+                      <SelectField label="Giáo viên chính" name="teacher_id" defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                      <SelectField label="Trạng thái" name="status" required defaultValue={item.status} options={["Scheduled","Rescheduled","Cancelled","Make-up required","Make-up completed"].map(v=>({value:v,label:v}))}/>
+                      <Field label="Cơ sở" name="campus" defaultValue={item.campus || ""}/>
+                      <Field label="Phòng" name="room" defaultValue={item.room || ""}/>
+                      <Field label="Link lớp" name="meeting_url" defaultValue={item.meeting_url || ""}/>
+                      <Field label="Nội dung" name="topic" defaultValue={item.topic || ""}/>
+                      <TextAreaField label="Lý do điều chỉnh" name="reason" required placeholder="Ví dụ: GV xin đổi ca, học viên đổi lịch, chuyển phòng..."/>
+                      <div className="form-actions"><button className="button button-primary">Lưu thay đổi</button></div>
+                    </FormGrid></form>
+                    <form action={archiveSessionSchedule} className="session-remove-form">
+                      <input type="hidden" name="session_id" value={item.id}/>
+                      <label className="form-group"><span>Lý do xóa khỏi lịch</span><textarea className="textarea" name="reason" required placeholder="Nêu rõ lý do để lưu lịch sử"/></label>
+                      <label className="checkbox-row"><input type="checkbox" name="confirm" required/>Tôi xác nhận xóa buổi này khỏi lịch hiển thị</label>
+                      <button className="button button-danger">Xóa khỏi lịch</button>
+                    </form>
+                  </div>
+                </details> : null}
               </article>;
             }) : <span className="calendar-empty">Không có lịch</span>}</div>
           </section>;
@@ -128,8 +158,26 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
           })}</tbody></table></div> : <Empty title="Chưa tìm thấy khung giờ chung" description="Cập nhật lại lịch rảnh của học viên hoặc giáo viên."/>}</div> : <Empty title="Chọn một học viên" description="Hệ thống sẽ so sánh các khung giờ đã đăng ký." />}
         </Panel>
         <div className="grid-2 section-gap">
-          <Panel title="Lịch rảnh giáo viên" description="Các slot đang có hiệu lực">
-            {availability.data?.length ? <div className="compact-list">{availability.data.slice(0,12).map((item:any)=>{ const teacherRow = joined(item.teachers); return <div className="compact-row" key={item.id}><div><strong>{teacherRow?.full_name || "Giáo viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><small>{item.mode || "Any"} · {item.campus || "Mọi cơ sở"}</small></div>; })}</div> : <Empty title="Chưa có lịch rảnh GV" description="Thêm availability để bắt đầu matching."/>}
+          <Panel title="Lịch rảnh giáo viên" description="Học vụ và Admin có thể điều chỉnh hoặc xóa slot khi cần">
+            {availability.data?.length ? <div className="compact-list">{availability.data.map((item:any)=>{ const teacherRow = joined(item.teachers); return <div className="compact-row availability-manage-row" key={item.id}>
+              <div><strong>{teacherRow?.full_name || "Giáo viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span><small>{item.mode || "Linh hoạt"} · {item.campus || "Mọi cơ sở"}</small></div>
+              <details className="inline-details"><summary className="button button-ghost button-small">Điều chỉnh</summary><div className="inline-edit-form availability-edit-panel">
+                <form action={updateTeacherAvailability} className="form-stack"><input type="hidden" name="availability_id" value={item.id}/>
+                  <SelectField label="Giáo viên" name="teacher_id" required defaultValue={teacherRow?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                  <SelectField label="Ngày" name="weekday" required defaultValue={String(item.weekday)} options={DAY_LABELS.map((label,index)=>({value:String(index+1),label}))}/>
+                  <Field label="Bắt đầu" name="start_time" type="time" required defaultValue={item.start_time?.slice(0,5)}/>
+                  <Field label="Kết thúc" name="end_time" type="time" required defaultValue={item.end_time?.slice(0,5)}/>
+                  <SelectField label="Hình thức" name="mode" defaultValue={item.mode || ""} options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/>
+                  <Field label="Cơ sở" name="campus" defaultValue={item.campus || ""}/>
+                  <Field label="Hiệu lực từ" name="effective_from" type="date" required defaultValue={item.effective_from}/>
+                  <Field label="Hiệu lực đến" name="effective_to" type="date" defaultValue={item.effective_to || ""}/>
+                  <label className="checkbox-row"><input name="is_recurring" type="checkbox" defaultChecked={item.is_recurring}/>Lặp hàng tuần</label>
+                  <TextAreaField label="Ghi chú" name="note" defaultValue={item.note || ""}/>
+                  <button className="button button-primary">Lưu thay đổi</button>
+                </form>
+                <form action={deleteTeacherAvailability} className="availability-delete-form"><input type="hidden" name="availability_id" value={item.id}/><label className="checkbox-row"><input name="confirm" type="checkbox" required/>Xác nhận xóa slot này</label><button className="button button-danger">Xóa lịch rảnh</button></form>
+              </div></details>
+            </div>; })}</div> : <Empty title="Chưa có lịch rảnh GV" description="Thêm availability để bắt đầu matching."/>}
           </Panel>
           <Panel title="Lịch rảnh học viên" description="Dữ liệu dùng để xếp lớp">
             {studentAvailability.data?.length ? <div className="compact-list">{studentAvailability.data.slice(0,12).map((item:any)=>{ const studentRow = joined(item.students); return <div className="compact-row" key={item.id}><div><strong>{studentRow?.full_name || "Học viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><small>{item.note || "Không có ghi chú"}</small></div>; })}</div> : <Empty title="Chưa có lịch rảnh HV" description="CSKH hoặc Học vụ có thể cập nhật trong hồ sơ học viên."/>}

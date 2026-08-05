@@ -501,3 +501,65 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .progress-ring { grid-row:2; }
   .calendar-toolbar { align-items:stretch; }
 }
+
+/* v1.1.1 — Academic/Admin schedule override controls */
+.button-small { padding: 7px 9px; font-size: 8px; }
+.session-manage-details { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 7px; }
+.session-manage-details > summary { list-style: none; cursor: pointer; color: var(--brand-blue); font-size: 8px; font-weight: 900; }
+.session-manage-details > summary::-webkit-details-marker { display: none; }
+.session-manage-body {
+  position: fixed;
+  z-index: 80;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(780px, calc(100vw - 30px));
+  max-height: 86vh;
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(16, 28, 70, .25);
+}
+.session-manage-details[open]::before {
+  content: "";
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  background: rgba(11, 20, 52, .42);
+  backdrop-filter: blur(2px);
+}
+.session-remove-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #ffc7c2;
+  border-radius: 13px;
+  background: #fff7f6;
+}
+.session-remove-form .button { justify-self: end; }
+.availability-manage-row { align-items: flex-start; }
+.availability-manage-row > div:first-child { min-width: 0; }
+.availability-edit-panel { width: min(520px, 92vw); max-height: 78vh; overflow: auto; }
+.availability-edit-panel .form-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.availability-edit-panel .form-stack > .form-group,
+.availability-edit-panel .form-stack > .checkbox-row,
+.availability-edit-panel .form-stack > button { min-width: 0; }
+.availability-edit-panel .form-stack > .form-span-2,
+.availability-edit-panel .form-stack > button { grid-column: 1 / -1; }
+.availability-delete-form {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #ffd0cc;
+}
+@media (max-width: 680px) {
+  .session-manage-body { width: calc(100vw - 20px); padding: 14px; }
+  .availability-edit-panel .form-stack { grid-template-columns: 1fr; }
+  .availability-edit-panel .form-stack > * { grid-column: 1 !important; }
+  .availability-delete-form { align-items: stretch; flex-direction: column; }
+}

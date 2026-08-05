@@ -210,6 +210,150 @@ export async function createTeacherAvailability(formData: FormData) {
   go("/schedule", "Đã lưu lịch rảnh giáo viên.");
 }
 
+export async function updateTeacherAvailability(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const availabilityId = text(formData.get("availability_id"));
+  if (!availabilityId) go("/schedule", undefined, "Không tìm thấy lịch rảnh cần điều chỉnh.");
+  const { error } = await supabase.from("teacher_availability").update({
+    teacher_id: text(formData.get("teacher_id")),
+    weekday: toNumber(formData.get("weekday")),
+    start_time: text(formData.get("start_time")),
+    end_time: text(formData.get("end_time")),
+    mode: text(formData.get("mode")) || null,
+    campus: text(formData.get("campus")) || null,
+    effective_from: text(formData.get("effective_from")),
+    effective_to: text(formData.get("effective_to")) || null,
+    is_recurring: formData.get("is_recurring") === "on",
+    note: text(formData.get("note")) || null
+  }).eq("id", availabilityId);
+  if (error) go("/schedule", undefined, error.message);
+  revalidatePath("/schedule");
+  go("/schedule", "Đã điều chỉnh lịch rảnh giáo viên.");
+}
+
+export async function deleteTeacherAvailability(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const availabilityId = text(formData.get("availability_id"));
+  if (formData.get("confirm") !== "on") go("/schedule", undefined, "Vui lòng xác nhận trước khi xóa lịch rảnh.");
+  const { error } = await supabase.from("teacher_availability").delete().eq("id", availabilityId);
+  if (error) go("/schedule", undefined, error.message);
+  revalidatePath("/schedule");
+  go("/schedule", "Đã xóa lịch rảnh giáo viên.");
+}
+
+export async function updateSessionSchedule(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const { data: oldSession, error: readError } = await supabase
+    .from("sessions")
+    .select("id,class_id,session_no,scheduled_date,start_time,end_time")
+    .eq("id", sessionId)
+    .is("archived_at", null)
+    .single();
+  if (readError || !oldSession) go("/schedule", undefined, readError?.message || "Không tìm thấy buổi học cần điều chỉnh.");
+
+  const newDate = text(formData.get("scheduled_date"));
+  const newStart = text(formData.get("start_time"));
+  const newEnd = text(formData.get("end_time"));
+  const reason = text(formData.get("reason"));
+  if (!reason) go("/schedule", undefined, "Vui lòng nhập lý do điều chỉnh lịch.");
+
+  const { error: updateError } = await supabase.from("sessions").update({
+    session_no: toNumber(formData.get("session_no")),
+    scheduled_date: newDate,
+    start_time: newStart,
+    end_time: newEnd,
+    duration_hours: toNumber(formData.get("duration_hours")),
+    mode: text(formData.get("mode")),
+    campus: text(formData.get("campus")) || null,
+    room: text(formData.get("room")) || null,
+    meeting_url: text(formData.get("meeting_url")) || null,
+    status: text(formData.get("status")) || "Scheduled",
+    topic: text(formData.get("topic")) || null
+  }).eq("id", sessionId);
+  if (updateError) go("/schedule", undefined, updateError.message);
+
+  const { error: changeError } = await supabase.from("session_changes").insert({
+    session_id: sessionId,
+    old_date: oldSession.scheduled_date,
+    new_date: newDate,
+    old_start_time: oldSession.start_time,
+    new_start_time: newStart,
+    old_end_time: oldSession.end_time,
+    new_end_time: newEnd,
+    reason,
+    changed_by: profile.id
+  });
+  if (changeError) go("/schedule", undefined, changeError.message);
+
+  const teacherId = text(formData.get("teacher_id"));
+  const { error: removeTeacherError } = await supabase
+    .from("session_teachers")
+    .delete()
+    .eq("session_id", sessionId)
+    .eq("role", "Main teacher");
+  if (removeTeacherError) go("/schedule", undefined, removeTeacherError.message);
+  if (teacherId) {
+    const { error: addTeacherError } = await supabase.from("session_teachers").insert({
+      session_id: sessionId,
+      teacher_id: teacherId,
+      role: "Main teacher",
+      payroll_factor: 1
+    });
+    if (addTeacherError) go("/schedule", undefined, addTeacherError.message);
+  }
+
+  revalidatePath("/schedule");
+  revalidatePath(`/classes/${oldSession.class_id}`);
+  revalidatePath("/dashboard");
+  go("/schedule", "Đã điều chỉnh lịch dạy và lưu lịch sử thay đổi.");
+}
+
+export async function archiveSessionSchedule(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const reason = text(formData.get("reason"));
+  if (formData.get("confirm") !== "on") go("/schedule", undefined, "Vui lòng xác nhận trước khi xóa lịch.");
+  if (!reason) go("/schedule", undefined, "Vui lòng nhập lý do xóa lịch.");
+
+  const { data: oldSession, error: readError } = await supabase
+    .from("sessions")
+    .select("id,class_id,scheduled_date,start_time,end_time")
+    .eq("id", sessionId)
+    .is("archived_at", null)
+    .single();
+  if (readError || !oldSession) go("/schedule", undefined, readError?.message || "Không tìm thấy buổi học cần xóa.");
+
+  const { error: updateError } = await supabase.from("sessions").update({
+    status: "Cancelled",
+    archived_at: new Date().toISOString(),
+    archived_by: profile.id
+  }).eq("id", sessionId);
+  if (updateError) go("/schedule", undefined, updateError.message);
+
+  const { error: changeError } = await supabase.from("session_changes").insert({
+    session_id: sessionId,
+    old_date: oldSession.scheduled_date,
+    new_date: oldSession.scheduled_date,
+    old_start_time: oldSession.start_time,
+    new_start_time: oldSession.start_time,
+    old_end_time: oldSession.end_time,
+    new_end_time: oldSession.end_time,
+    reason: `Xóa khỏi lịch: ${reason}`,
+    changed_by: profile.id
+  });
+  if (changeError) go("/schedule", undefined, changeError.message);
+
+  revalidatePath("/schedule");
+  revalidatePath(`/classes/${oldSession.class_id}`);
+  revalidatePath("/dashboard");
+  go("/schedule", "Đã xóa buổi học khỏi lịch. Dữ liệu vẫn được lưu trong lịch sử.");
+}
+
 export async function createSession(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();

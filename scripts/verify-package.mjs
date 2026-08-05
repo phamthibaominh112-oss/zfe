@@ -11,7 +11,8 @@ const required = [
   "app/(protected)/admin/users/page.tsx",
   "supabase/migrations/001_schema.sql",
   "supabase/migrations/002_rls.sql",
-  "supabase/migrations/003_storage_and_seed.sql"
+  "supabase/migrations/003_storage_and_seed.sql",
+  "supabase/migrations/004_schedule_management.sql"
 ];
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing ${file}`);
@@ -40,6 +41,10 @@ for (const marker of [
   "public.current_role() = 'student'",
   "public.current_role() = 'teacher'"
 ]) if (!rls.includes(marker)) failures.push(`Missing RLS marker: ${marker}`);
+
+const scheduleMigration = read("supabase/migrations/004_schedule_management.sql");
+for (const marker of ["teacher_availability_delete", "session_teachers_delete", "public.is_academic_manager()"])
+  if (!scheduleMigration.includes(marker)) failures.push(`Missing schedule management marker: ${marker}`);
 
 for (const file of ["app/(protected)/students/page.tsx", "app/(protected)/students/[id]/page.tsx"]) {
   if (/\.select\(select\)/.test(read(file))) failures.push(`Dynamic Supabase select remains in ${file}`);

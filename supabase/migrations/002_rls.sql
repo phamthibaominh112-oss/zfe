@@ -228,7 +228,7 @@ create policy enrollments_delete on public.enrollments for delete to authenticat
 create policy teacher_availability_select on public.teacher_availability for select to authenticated using (public.is_academic_manager() or teacher_id = public.current_teacher_id());
 create policy teacher_availability_insert on public.teacher_availability for insert to authenticated with check (public.is_academic_manager() or teacher_id = public.current_teacher_id());
 create policy teacher_availability_update on public.teacher_availability for update to authenticated using (public.is_academic_manager() or teacher_id = public.current_teacher_id()) with check (public.is_academic_manager() or teacher_id = public.current_teacher_id());
-create policy teacher_availability_delete on public.teacher_availability for delete to authenticated using (public.is_admin());
+create policy teacher_availability_delete on public.teacher_availability for delete to authenticated using (public.is_academic_manager());
 
 create policy student_availability_select on public.student_availability for select to authenticated using (public.current_role() in ('admin','academic_manager','customer_service') or student_id = public.current_student_id());
 create policy student_availability_insert on public.student_availability for insert to authenticated with check (public.current_role() in ('admin','academic_manager','customer_service'));
@@ -244,7 +244,7 @@ create policy sessions_delete on public.sessions for delete to authenticated usi
 create policy session_teachers_select on public.session_teachers for select to authenticated using (public.teacher_has_session(session_id) or exists(select 1 from public.sessions s where s.id = session_id and public.can_view_class(s.class_id)));
 create policy session_teachers_insert on public.session_teachers for insert to authenticated with check (public.is_academic_manager());
 create policy session_teachers_update on public.session_teachers for update to authenticated using (public.is_academic_manager()) with check (public.is_academic_manager());
-create policy session_teachers_delete on public.session_teachers for delete to authenticated using (public.is_admin());
+create policy session_teachers_delete on public.session_teachers for delete to authenticated using (public.is_academic_manager());
 
 create policy session_changes_select on public.session_changes for select to authenticated using (exists(select 1 from public.sessions s where s.id = session_id and public.can_view_class(s.class_id)));
 create policy session_changes_insert on public.session_changes for insert to authenticated with check (public.is_academic_manager());

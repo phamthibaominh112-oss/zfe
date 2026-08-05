@@ -5,9 +5,9 @@
 | User & role management | Full | No | No | No | No |
 | Student master profile | Full | Add/Edit | Assigned students, read | Add/Edit | Own profile, read |
 | Classes | Full | Add/Edit | Assigned classes | Basic operational view | Enrolled classes |
-| Teacher availability | Full | View/Manage | Own Add/Edit | No | No |
+| Teacher availability | Full Add/Edit/Delete | Add/Edit/Delete | Own Add/Edit | No | No |
 | Student availability | Full | Add/Edit | No | Add/Edit | Own read |
-| Sessions | Full | Add/Edit/Reschedule | Assigned session read/complete | No | Enrolled session read |
+| Sessions | Full | Add/Edit/Reschedule/Remove from calendar | Assigned session read/complete | No | Enrolled session read |
 | Attendance/Homework | Full | Add/Edit | Assigned session Add/Edit | No | Own read |
 | Assignment/Submission | Full | Full | Assigned classes | No | Own submit/read |
 | Assessment & results | Full | Full | Assigned classes | No | Own published results |
