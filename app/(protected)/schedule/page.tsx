@@ -7,6 +7,7 @@ import { dateOnlyString, vietnamTodayString, vietnamWeek } from "@/lib/vietnam-d
 import { createClient } from "@/lib/supabase/server";
 
 const DAY_LABELS = ["Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy","Chủ nhật"];
+const UNASSIGNED_TEACHER = "__unassigned__";
 
 function getWeek(offset: number) {
   return vietnamWeek(offset);
@@ -30,7 +31,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
   const [sessions, availability, studentAvailability, teachers, classes, students] = await Promise.all([
-    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
+    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("teachers").select("id,code,full_name").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
@@ -39,16 +40,41 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   ]);
 
   const selectedStudentId = canManage ? String(params.student || "") : "";
+  const selectedTeacherId = canManage ? String(params.teacher || "") : "";
+  const teacherRows = teachers.data || [];
+  const selectedTeacher = selectedTeacherId && selectedTeacherId !== UNASSIGNED_TEACHER
+    ? teacherRows.find((teacher:any) => teacher.id === selectedTeacherId)
+    : null;
+  const selectedTeacherLabel = selectedTeacherId === UNASSIGNED_TEACHER
+    ? "Chưa phân giáo viên"
+    : selectedTeacher
+      ? `${selectedTeacher.code} · ${selectedTeacher.full_name}`
+      : "Tất cả giáo viên";
+
+  function scheduleHref(nextWeek: number, options?: { keepStudent?: boolean; clearTeacher?: boolean }) {
+    const query = new URLSearchParams();
+    if (nextWeek !== 0) query.set("week", String(nextWeek));
+    if (selectedTeacherId && !options?.clearTeacher) query.set("teacher", selectedTeacherId);
+    if (selectedStudentId && options?.keepStudent) query.set("student", selectedStudentId);
+    const suffix = query.toString();
+    return `/schedule${suffix ? `?${suffix}` : ""}`;
+  }
+
   const selectedStudentSlots = (studentAvailability.data || []).filter((slot:any) => slot.student_id === selectedStudentId);
   const matchingRows = selectedStudentSlots.flatMap((studentSlot:any) => (availability.data || [])
     .filter((teacherSlot:any) => teacherSlot.weekday === studentSlot.weekday && teacherSlot.start_time < studentSlot.end_time && teacherSlot.end_time > studentSlot.start_time)
     .map((teacherSlot:any) => ({ studentSlot, teacherSlot })));
 
   const allSessions = sessions.data || [];
-  const totalHours = allSessions.reduce((sum: number, item: any) => sum + Number(item.duration_hours || 0), 0);
-  const onlineCount = allSessions.filter((item: any) => item.mode === "Online").length;
-  const offlineCount = allSessions.filter((item: any) => item.mode === "Offline").length;
-  const todayCount = allSessions.filter((item: any) => item.scheduled_date === today).length;
+  const visibleSessions = selectedTeacherId === UNASSIGNED_TEACHER
+    ? allSessions.filter((item:any) => !(item.session_teachers || []).some((link:any) => joined(link.teachers)?.id))
+    : selectedTeacherId
+      ? allSessions.filter((item:any) => (item.session_teachers || []).some((link:any) => joined(link.teachers)?.id === selectedTeacherId))
+      : allSessions;
+  const totalHours = visibleSessions.reduce((sum: number, item: any) => sum + Number(item.duration_hours || 0), 0);
+  const onlineCount = visibleSessions.filter((item: any) => item.mode === "Online").length;
+  const offlineCount = visibleSessions.filter((item: any) => item.mode === "Offline").length;
+  const todayCount = visibleSessions.filter((item: any) => item.scheduled_date === today).length;
 
   const pageTitle = profile.role === "student" ? "Lịch học của tôi" : profile.role === "teacher" ? "Lịch dạy của tôi" : "Lịch trung tâm";
   const pageDescription = profile.role === "student"
@@ -80,8 +106,25 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
+    {canManage ? <section className="teacher-schedule-filter">
+      <div className="teacher-filter-copy">
+        <span>Xem lịch theo giáo viên</span>
+        <strong>{selectedTeacherLabel}</strong>
+        <small>Chọn một giáo viên để xem riêng lịch tuần, tổng số buổi và tổng giờ được phân công.</small>
+      </div>
+      <form method="get" className="teacher-filter-form">
+        {safeOffset !== 0 ? <input type="hidden" name="week" value={safeOffset}/> : null}
+        <label className="form-group teacher-filter-select"><span>Giáo viên</span><select className="select" name="teacher" defaultValue={selectedTeacherId}>
+          <option value="">Tất cả giáo viên</option>
+          <option value={UNASSIGNED_TEACHER}>Chưa phân giáo viên</option>
+          {teacherRows.map((teacher:any)=><option key={teacher.id} value={teacher.id}>{teacher.code} · {teacher.full_name}</option>)}
+        </select></label>
+        <button className="button button-primary">Xem lịch</button>
+        {selectedTeacherId ? <a className="button button-ghost" href={scheduleHref(safeOffset, { clearTeacher: true })}>Xem tất cả</a> : null}
+      </form>
+    </section> : null}
     <div className="metrics-grid compact-metrics schedule-metrics">
-      <MetricCard label="Buổi trong tuần" value={allSessions.length} note={`${formatDate(start)} – ${formatDate(end)}`} />
+      <MetricCard label="Buổi trong tuần" value={visibleSessions.length} note={`${formatDate(start)} – ${formatDate(end)}`} />
       <MetricCard label="Hôm nay" value={todayCount} tone="yellow" />
       <MetricCard label="Tổng số giờ" value={`${totalHours.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}h`} tone="green" />
       <MetricCard label="Online / Offline" value={`${onlineCount} / ${offlineCount}`} tone="neutral" />
@@ -89,14 +132,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
     <section className="calendar-shell">
       <div className="week-toolbar calendar-toolbar">
-        <a className="button button-ghost" href={`/schedule?week=${safeOffset-1}`}>← Tuần trước</a>
+        <a className="button button-ghost" href={scheduleHref(safeOffset-1)}>← Tuần trước</a>
         <div className="week-title"><strong>{formatDate(start)} – {formatDate(end)}</strong><span>{safeOffset === 0 ? "Tuần hiện tại" : safeOffset > 0 ? `Sau ${safeOffset} tuần` : `Trước ${Math.abs(safeOffset)} tuần`}</span></div>
-        <div className="week-nav"><a className="button button-secondary" href="/schedule">Tuần này</a><a className="button button-ghost" href={`/schedule?week=${safeOffset+1}`}>Tuần sau →</a></div>
+        <div className="week-nav"><a className="button button-secondary" href={scheduleHref(0)}>Tuần này</a><a className="button button-ghost" href={scheduleHref(safeOffset+1)}>Tuần sau →</a></div>
       </div>
       <div className="week-grid focus-calendar">
         {days.map((day,index)=>{
           const key=dateOnlyString(day);
-          const items=allSessions.filter((x:any)=>x.scheduled_date===key);
+          const items=visibleSessions.filter((x:any)=>x.scheduled_date===key);
           const isToday = key === today;
           return <section className={`day-column ${isToday ? "day-today" : ""}`} key={key}>
             <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length} buổi</small></div>
@@ -151,7 +194,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <summary><div><strong>Công cụ xếp lịch</strong><span>Match lịch rảnh học viên với giáo viên và kiểm tra dữ liệu availability</span></div><b>+</b></summary>
       <div className="tool-drawer-body">
         <Panel title="Tìm khung giờ phù hợp" description="Chọn học viên để xem các slot GV trùng lịch rảnh">
-          <form className="inline-form" method="get"><label className="form-group"><span>Học viên</span><select className="select" name="student" defaultValue={selectedStudentId}><option value="">Chọn học viên...</option>{(students.data || []).map((student:any)=><option value={student.id} key={student.id}>{student.code} · {student.full_name} · {student.status}</option>)}</select></label><input type="hidden" name="week" value={safeOffset}/><button className="button button-primary">Tìm lịch phù hợp</button></form>
+          <form className="inline-form" method="get"><label className="form-group"><span>Học viên</span><select className="select" name="student" defaultValue={selectedStudentId}><option value="">Chọn học viên...</option>{(students.data || []).map((student:any)=><option value={student.id} key={student.id}>{student.code} · {student.full_name} · {student.status}</option>)}</select></label><input type="hidden" name="week" value={safeOffset}/>{selectedTeacherId ? <input type="hidden" name="teacher" value={selectedTeacherId}/> : null}<button className="button button-primary">Tìm lịch phù hợp</button></form>
           {selectedStudentId ? <div className="section-gap">{matchingRows.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Ngày</th><th>Lịch rảnh HV</th><th>Giáo viên</th><th>Lịch rảnh GV</th><th>Hình thức / Cơ sở</th></tr></thead><tbody>{matchingRows.map((row:any,index:number)=>{
             const teacherRow = joined(row.teacherSlot.teachers);
             return <tr key={`${row.teacherSlot.id}-${row.studentSlot.id}-${index}`}><td>{DAY_LABELS[row.studentSlot.weekday-1]}</td><td>{row.studentSlot.start_time?.slice(0,5)}–{row.studentSlot.end_time?.slice(0,5)}</td><td><strong>{teacherRow?.code} · {teacherRow?.full_name}</strong></td><td>{row.teacherSlot.start_time?.slice(0,5)}–{row.teacherSlot.end_time?.slice(0,5)}</td><td>{row.teacherSlot.mode || "Linh hoạt"} · {row.teacherSlot.campus || "Mọi cơ sở"}</td></tr>;
