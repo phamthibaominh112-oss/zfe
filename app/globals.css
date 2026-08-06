@@ -745,3 +745,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .rate-setting-card > * { grid-column:1 !important; }
   .dashboard-rate-row { grid-template-columns:1fr; }
 }
+
+/* v1.2.2 — payroll-rate and operating-cost refinements */
+.rate-setting-card.rate-missing {
+  border-color: #f5a3a3;
+  background: #fff8f7;
+  box-shadow: inset 4px 0 0 var(--red);
+}

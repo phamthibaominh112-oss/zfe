@@ -15,6 +15,7 @@ const required = [
   "supabase/migrations/004_schedule_management.sql",
   "supabase/migrations/005_finance_accounting_notifications.sql",
   "supabase/migrations/006_monthly_payroll_and_financial_tracking.sql",
+  "supabase/migrations/007_expense_categories_and_payroll_guard.sql",
   "app/(protected)/payroll/page.tsx"
 ];
 const failures = [];
@@ -57,6 +58,10 @@ for (const marker of ["expense_transactions", "payment_receipts", "notifications
 const payrollMigration = read("supabase/migrations/006_monthly_payroll_and_financial_tracking.sql");
 for (const marker of ["teacher_compensation_settings", "teacher_payroll_statements", "teacher_review_payroll", "admin_approve_teacher_payroll", "monthly_financial_snapshots", "run_month_end_payroll_job"])
   if (!payrollMigration.includes(marker)) failures.push(`Missing payroll marker: ${marker}`);
+
+const expenseCategoryMigration = read("supabase/migrations/007_expense_categories_and_payroll_guard.sql");
+for (const marker of ["cost_type", "Lương giảng viên", "Nền tảng / Phần mềm", "Vui lòng nhập đơn giá giờ dạy lớn hơn 0"])
+  if (!expenseCategoryMigration.includes(marker)) failures.push(`Missing expense category/payroll guard marker: ${marker}`);
 
 for (const file of ["app/(protected)/students/page.tsx", "app/(protected)/students/[id]/page.tsx"]) {
   if (/\.select\(select\)/.test(read(file))) failures.push(`Dynamic Supabase select remains in ${file}`);

@@ -931,10 +931,13 @@ export async function updateRenewalFollowup(formData: FormData) {
 export async function createExpense(formData: FormData) {
   const profile = await requireRole(["admin"]);
   const supabase = await createClient();
+  const amount = toNumber(formData.get("amount"));
+  if (amount <= 0) go("/finance/expenses", undefined, "Số tiền chi phải lớn hơn 0.");
   const { error } = await supabase.from("expense_transactions").insert({
     category_id: text(formData.get("category_id")),
+    cost_type: text(formData.get("cost_type")) || "Variable cost",
     expense_date: text(formData.get("expense_date")) || new Date().toISOString().slice(0, 10),
-    amount: toNumber(formData.get("amount")),
+    amount,
     vendor: text(formData.get("vendor")) || null,
     description: text(formData.get("description")),
     payment_method: text(formData.get("payment_method")) || null,
@@ -957,10 +960,13 @@ export async function createExpense(formData: FormData) {
 export async function updateExpense(formData: FormData) {
   const profile = await requireRole(["admin"]);
   const supabase = await createClient();
+  const amount = toNumber(formData.get("amount"));
+  if (amount <= 0) go("/finance/expenses", undefined, "Số tiền chi phải lớn hơn 0.");
   const { error } = await supabase.from("expense_transactions").update({
     category_id: text(formData.get("category_id")),
+    cost_type: text(formData.get("cost_type")) || "Variable cost",
     expense_date: text(formData.get("expense_date")),
-    amount: toNumber(formData.get("amount")),
+    amount,
     vendor: text(formData.get("vendor")) || null,
     description: text(formData.get("description")),
     payment_method: text(formData.get("payment_method")) || null,
@@ -1002,9 +1008,19 @@ export async function postTeacherPayrollExpense(formData: FormData) {
   if (payrollError || categoryError || !payroll || !category) {
     go("/finance/expenses", undefined, payrollError?.message || categoryError?.message || "Không tìm thấy dữ liệu lương giáo viên.");
   }
+  if (Number(payroll.completed_hours || 0) <= 0) {
+    go("/finance/expenses", undefined, "Không thể ghi nhận lương vì giáo viên chưa có giờ hoàn thành trong tháng.");
+  }
+  if (Number(payroll.hourly_rate || 0) <= 0) {
+    go("/finance/expenses", undefined, "Chưa thiết lập đơn giá giờ dạy cho giáo viên. Vui lòng cập nhật đơn giá trước.");
+  }
+  if (Number(payroll.estimated_payroll || 0) <= 0) {
+    go("/finance/expenses", undefined, "Mức lương phải lớn hơn 0 trước khi ghi vào chi phí.");
+  }
   const sourceKey = `teacher-payroll:${teacherId}:${payrollMonth}`;
   const { error } = await supabase.from("expense_transactions").upsert({
     category_id: category.id,
+    cost_type: "Teacher payroll",
     expense_date: `${payrollMonth.slice(0, 7)}-01`,
     amount: Number(payroll.estimated_payroll || 0),
     vendor: payroll.teacher_name,
@@ -1082,9 +1098,11 @@ export async function updateTeacherHourlyRate(formData: FormData) {
   const teacherId = text(formData.get("teacher_id"));
   const month = text(formData.get("return_month"));
   const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
+  const hourlyRate = toNumber(formData.get("hourly_rate"));
+  if (hourlyRate <= 0) go(target, undefined, "Đơn giá giờ dạy phải lớn hơn 0.");
   const { error } = await supabase.rpc("update_teacher_compensation_rate", {
     p_teacher_id: teacherId,
-    p_hourly_rate: toNumber(formData.get("hourly_rate")),
+    p_hourly_rate: hourlyRate,
     p_effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
     p_note: text(formData.get("note")) || null
   });
