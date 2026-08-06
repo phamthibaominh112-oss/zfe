@@ -156,7 +156,7 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
           <Field label="Đơn giá / giờ" name="hourly_rate" type="number" min="1" step="1000" defaultValue={rate || ""} required />
           <Field label="Hiệu lực từ" name="effective_from" type="date" defaultValue={setting?.effective_from || range.start} required />
           <Field label="Ghi chú" name="note" defaultValue={setting?.note || ""} />
-          <button className="button button-secondary button-small">Lưu đơn giá</button>
+          <button className="button button-primary rate-save-button">Lưu đơn giá</button>
         </form>;
       })}</div> : <Empty title="Chưa có giáo viên" description="Tạo hồ sơ giáo viên trước khi thiết lập đơn giá." />}
     </Panel>

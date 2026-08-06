@@ -752,3 +752,40 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   background: #fff8f7;
   box-shadow: inset 4px 0 0 var(--red);
 }
+
+
+/* v1.2.3 — Teacher hourly-rate form layout fix */
+.rate-settings-grid {
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.rate-setting-card {
+  grid-template-columns: minmax(180px, 1.2fr) minmax(150px, .8fr) minmax(160px, .85fr) minmax(220px, 1.25fr) minmax(130px, auto);
+  gap: 14px;
+  align-items: end;
+  overflow: visible;
+}
+.rate-setting-card .form-group { min-width: 0; }
+.rate-setting-card .input { width: 100%; min-width: 0; }
+.rate-setting-card .rate-save-button {
+  width: 100%;
+  min-width: 126px;
+  min-height: 42px;
+  padding: 10px 14px;
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
+  justify-content: center;
+}
+@media (max-width: 1180px) {
+  .rate-setting-card {
+    grid-template-columns: minmax(180px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  }
+  .rate-setting-card > div:first-child { grid-column: 1 / -1; }
+  .rate-setting-card .rate-save-button { grid-column: 1 / -1; max-width: 220px; justify-self: end; }
+}
+@media (max-width: 760px) {
+  .rate-setting-card { grid-template-columns: 1fr; }
+  .rate-setting-card > * { grid-column: 1 !important; }
+  .rate-setting-card .rate-save-button { max-width: none; justify-self: stretch; }
+}
