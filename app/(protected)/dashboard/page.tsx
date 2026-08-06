@@ -1,6 +1,7 @@
-import { rateTeacher, submitAssignment } from "@/app/actions";
+import { rateTeacher, submitAssignment, teacherReviewPayroll, updateTeacherHourlyRate } from "@/app/actions";
 import Link from "next/link";
 import { PageHeader, MetricCard, Panel, Status, Flash, Empty } from "@/components/ui";
+import { Field } from "@/components/forms";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -63,6 +64,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const nextSession = upcoming[0];
     const nextClass = joined(nextSession?.classes);
     let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0 };
+    let adminTeacherRates: any[] = [];
+    let adminPayrollStatements: any[] = [];
+    let importedMonthlyBalance: any = null;
     if (profile.role === "admin") {
       const monthStart = `${today.slice(0,7)}-01`;
       const nextMonthDate = new Date(`${monthStart}T00:00:00Z`);
@@ -70,12 +74,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       const monthEnd = nextMonthDate.toISOString().slice(0,10);
       const next14Date = vietnamTodayDate();
       next14Date.setUTCDate(next14Date.getUTCDate()+14);
-      const [monthPayments, monthExpenses, tuitionRows, renewalRows] = await Promise.all([
+      const [monthPayments, monthExpenses, tuitionRows, renewalRows, teacherRates, payrollStatements, monthlyBalance] = await Promise.all([
         supabase.from("payment_transactions").select("amount").gte("paid_at", `${monthStart}T00:00:00Z`).lt("paid_at", `${monthEnd}T00:00:00Z`),
         supabase.from("expense_transactions").select("amount").gte("expense_date", monthStart).lt("expense_date", monthEnd).is("archived_at", null).neq("status", "Void"),
         supabase.from("tuition_accounts").select("balance_amount").is("archived_at", null),
-        supabase.from("tuition_accounts").select("id", { count: "exact", head: true }).gte("renewal_due_date", today).lte("renewal_due_date", dateOnlyString(next14Date)).is("archived_at", null)
+        supabase.from("tuition_accounts").select("id", { count: "exact", head: true }).gte("renewal_due_date", today).lte("renewal_due_date", dateOnlyString(next14Date)).is("archived_at", null),
+        supabase.from("teachers").select("id,code,full_name,teacher_compensation_settings(hourly_rate,effective_from)").is("archived_at", null).order("full_name"),
+        supabase.from("teacher_payroll_statements").select("id,teacher_id,teacher_status,admin_status,gross_amount").eq("payroll_month", monthStart),
+        supabase.from("monthly_financial_balance").select("month,revenue_amount,total_expense,operating_result,source").eq("month", monthStart).maybeSingle()
       ]);
+      adminTeacherRates = teacherRates.data || [];
+      adminPayrollStatements = payrollStatements.data || [];
+      importedMonthlyBalance = monthlyBalance.data || null;
       adminFinance = {
         revenue: (monthPayments.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
         expenses: (monthExpenses.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
@@ -127,9 +137,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="quick-actions-grid section-gap">
           <QuickAction href="/finance" icon="₫" title="Thu phí & phiếu thu" description="Giao dịch, công nợ và thông báo" />
           <QuickAction href="/finance/expenses" icon="−" title="Ghi nhận chi phí" description="Cố định, biến đổi và lương" tone="yellow" />
-          <QuickAction href="/finance/reports" icon="↗" title="Báo cáo thu chi" description={`Công nợ ${formatMoney(adminFinance.outstanding)}`} tone="green" />
+          <QuickAction href="/payroll" icon="LG" title="Chốt lương giáo viên" description={`${adminPayrollStatements.filter((row:any)=>row.teacher_status === "Approved" && row.admin_status === "Pending").length} bảng chờ duyệt`} tone="green" />
         </div>
       </Panel> : null}
+      {profile.role === "admin" ? <div className="dashboard-main-grid section-gap">
+        <Panel title="Đơn giá giờ dạy" description="Chỉnh nhanh tại Dashboard; mức mới hiển thị ngay trên tài khoản GV." action={<Link className="text-link" href="/payroll">Quản lý lương →</Link>}>
+          {adminTeacherRates.length ? <div className="dashboard-rate-list">{adminTeacherRates.slice(0,8).map((teacher:any)=>{const setting=joined(teacher.teacher_compensation_settings);return <form action={updateTeacherHourlyRate} className="dashboard-rate-row" key={teacher.id}><input type="hidden" name="teacher_id" value={teacher.id}/><input type="hidden" name="return_month" value={today.slice(0,7)}/><input type="hidden" name="return_path" value="/dashboard"/><input type="hidden" name="effective_from" value={setting?.effective_from || `${today.slice(0,7)}-01`}/><div><strong>{teacher.full_name}</strong><small>{teacher.code}</small></div><Field label="VNĐ/giờ" name="hourly_rate" type="number" min="0" step="1000" defaultValue={Number(setting?.hourly_rate || 0)} required/><button className="button button-secondary button-small">Lưu</button></form>})}</div> : <Empty title="Chưa có giáo viên" description="Đơn giá sẽ xuất hiện sau khi hồ sơ giáo viên được tạo."/>}
+        </Panel>
+        <Panel title="Cân đối doanh thu – chi phí" description="Khu vực dữ liệu tổng hợp theo tháng, sẵn sàng cho import sau này." action={<Link className="text-link" href="/finance/reports">Mở báo cáo →</Link>}>
+          {importedMonthlyBalance ? <div className="metrics-grid compact-metrics"><MetricCard label="Doanh thu" value={formatMoney(importedMonthlyBalance.revenue_amount)} tone="green"/><MetricCard label="Tổng chi" value={formatMoney(importedMonthlyBalance.total_expense)} tone="red"/><MetricCard label="Kết quả" value={formatMoney(importedMonthlyBalance.operating_result)} tone={Number(importedMonthlyBalance.operating_result)>=0?"blue":"red"}/></div> : <Empty title="Chưa có dữ liệu cân đối tháng" description="Hiện đang để trống. Mẫu CSV và hàm đồng bộ đã được chuẩn bị để nhập dữ liệu sau."/>}
+        </Panel>
+      </div> : null}
     </>;
   }
 
@@ -137,12 +155,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const { data: teacher } = await supabase.from("teachers").select("id,full_name").eq("user_id", profile.id).single();
     const { data: classAssignments } = teacher ? await supabase.from("class_teachers").select("class_id,classes(id,code,name,status)").eq("teacher_id", teacher.id) : { data: [] as any[] };
     const classIds = (classAssignments || []).map((x: any) => x.class_id);
-    const [sessions, hours, feedback, observations, roster] = await Promise.all([
+    const [sessions, hours, feedback, observations, roster, payrollStatement, compensation, livePayroll] = await Promise.all([
       classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(role,teachers(id,code,full_name))").in("class_id", classIds).gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).is("archived_at", null).order("scheduled_date").order("start_time") : Promise.resolve({ data: [] as any[] }),
       teacher ? supabase.from("teacher_monthly_hours").select("completed_hours").eq("teacher_id", teacher.id).eq("month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       supabase.from("progress_feedback").select("id,status,milestone,enrollments(students(full_name),classes(code))").eq("submitted_by", profile.id).order("updated_at", { ascending: false }).limit(8),
       teacher ? supabase.from("teacher_observations").select("id,total_score,status,strengths,areas_to_improve,shared_at").eq("teacher_id", teacher.id).order("created_at", { ascending: false }).limit(4) : Promise.resolve({ data: [] as any[] }),
-      classIds.length ? supabase.from("enrollments").select("class_id,status,students(id,code,full_name)").in("class_id", classIds).is("archived_at", null) : Promise.resolve({ data: [] as any[] })
+      classIds.length ? supabase.from("enrollments").select("class_id,status,students(id,code,full_name)").in("class_id", classIds).is("archived_at", null) : Promise.resolve({ data: [] as any[] }),
+      teacher ? supabase.from("teacher_payroll_statements").select("id,completed_hours,hourly_rate_snapshot,gross_amount,teacher_status,admin_status").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
+      teacher ? supabase.from("teacher_compensation_settings").select("hourly_rate,effective_from").eq("teacher_id", teacher.id).maybeSingle() : Promise.resolve({ data: null as any }),
+      teacher ? supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any })
     ]);
     const teacherStudentMap = new Map<string, any>();
     for (const row of roster.data || []) {
@@ -154,6 +175,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const nextSession = (sessions.data || []).find((item: any) => item.scheduled_date >= today && !String(item.status).toLowerCase().includes("cancel"));
     const nextClass = joined(nextSession?.classes);
     const pendingFeedback = (feedback.data || []).filter((x: any) => !["Published", "Approved"].includes(x.status)).length;
+    const payrollHours = Number(payrollStatement.data?.completed_hours ?? livePayroll.data?.completed_hours ?? hours.data?.completed_hours ?? 0);
+    const payrollRate = Number(payrollStatement.data?.hourly_rate_snapshot ?? livePayroll.data?.hourly_rate ?? compensation.data?.hourly_rate ?? 0);
+    const payrollAmount = Number(payrollStatement.data?.gross_amount ?? livePayroll.data?.estimated_payroll ?? payrollHours * payrollRate);
 
     return <>
       <PageHeader eyebrow="Lịch dạy của tôi" title={`Chào ${profile.full_name}`} description="Bắt đầu từ lịch hôm nay, sau đó xử lý điểm danh, bài tập và feedback." />
@@ -169,6 +193,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/academic" icon="✓" title="Điểm danh" description="Cập nhật attendance và homework" />
         <QuickAction href="/schedule" icon="◷" title="Lịch rảnh" description="Book lịch rảnh cho các tuần tới" tone="yellow" />
         <QuickAction href="/classes" icon="▦" title="Lớp của tôi" description="Tiến độ lớp và danh sách HV" tone="green" />
+        <QuickAction href="/payroll" icon="₫" title="Lương tháng" description={`${payrollHours.toLocaleString("vi-VN")} giờ · ${formatMoney(payrollAmount)}`} tone="green" />
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Lớp phụ trách" value={classIds.length} />
@@ -176,6 +201,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <MetricCard label="Giờ hoàn thành tháng" value={`${Number(hours.data?.completed_hours || 0).toLocaleString("vi-VN")}h`} tone="green" />
         <MetricCard label="Feedback cần xử lý" value={pendingFeedback} tone={pendingFeedback ? "red" : "neutral"} />
       </div>
+      <Panel className="section-gap" title="Tổng kết lương tháng" description={payrollStatement.data ? "Bảng lương đã được chốt; vui lòng kiểm tra và xác nhận." : "Số liệu đang tạm tính và sẽ tự chốt vào ngày cuối tháng."} action={<Link className="text-link" href="/payroll">Xem chi tiết →</Link>}>
+        <div className="payroll-dashboard-summary"><div><span>Giờ hoàn thành</span><strong>{payrollHours.toLocaleString("vi-VN")}h</strong></div><div><span>Đơn giá</span><strong>{formatMoney(payrollRate)}</strong></div><div><span>{payrollStatement.data?.teacher_status === "Approved" ? "Mức lương đã xác nhận" : "Mức lương dự kiến"}</span><strong>{formatMoney(payrollAmount)}</strong></div><div><span>Trạng thái</span><Status value={payrollStatement.data?.teacher_status || "Chưa mở"}/></div></div>
+        {payrollStatement.data && payrollStatement.data.teacher_status !== "Approved" && payrollStatement.data.admin_status === "Pending" ? <form action={teacherReviewPayroll} className="payroll-dashboard-action"><input type="hidden" name="statement_id" value={payrollStatement.data.id}/><input type="hidden" name="decision" value="Approved"/><input type="hidden" name="return_month" value={today.slice(0,7)}/><input type="hidden" name="return_path" value="/dashboard"/><button className="button button-primary">Xác nhận số giờ & mức lương</button></form> : null}
+      </Panel>
       <div className="dashboard-main-grid">
         <Panel title="Lịch dạy hôm nay" description="Các lớp theo thứ tự thời gian" action={<Link className="text-link" href="/schedule">Lịch cả tuần →</Link>}>
           <SessionList sessions={todaySessions} emptyTitle="Hôm nay chưa có lớp" emptyDescription="Lịch tuần vẫn có thể được xem tại mục Lịch dạy." />

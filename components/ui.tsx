@@ -46,7 +46,11 @@ const STATUS_LABELS: Record<string, string> = {
   contacted: "Đã liên hệ",
   "call back": "Hẹn liên hệ lại",
   renewed: "Đã tái phí",
-  "not renewing": "Không tái phí"
+  "not renewing": "Không tái phí",
+  "pending review": "Chờ GV xác nhận",
+  disputed: "Có sai lệch",
+  "chưa mở": "Chưa mở",
+  "chưa tạo": "Chưa tạo"
 };
 
 export function Status({ value }: { value: string | null | undefined }) {
@@ -54,9 +58,9 @@ export function Status({ value }: { value: string | null | undefined }) {
   const normalized = raw.toLowerCase();
   const tone = normalized.includes("active") || normalized.includes("completed") || normalized.includes("approved") || normalized.includes("published") || normalized.includes("present") || normalized.includes("paid") || normalized.includes("matched")
     ? "green"
-    : normalized.includes("pending") || normalized.includes("scheduled") || normalized.includes("submitted") || normalized.includes("draft") || normalized.includes("ready")
+    : normalized.includes("pending") || normalized.includes("chờ") || normalized.includes("scheduled") || normalized.includes("submitted") || normalized.includes("draft") || normalized.includes("ready")
       ? "blue"
-      : normalized.includes("risk") || normalized.includes("late") || normalized.includes("overdue") || normalized.includes("cancel") || normalized.includes("absent") || normalized.includes("rejected")
+      : normalized.includes("risk") || normalized.includes("disputed") || normalized.includes("sai lệch") || normalized.includes("late") || normalized.includes("overdue") || normalized.includes("cancel") || normalized.includes("absent") || normalized.includes("rejected")
         ? "red"
         : normalized.includes("pause") || normalized.includes("revision") || normalized.includes("partial") || normalized.includes("not submitted")
           ? "yellow"

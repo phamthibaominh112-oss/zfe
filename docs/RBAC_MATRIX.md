@@ -19,3 +19,16 @@
 | Delete | Full | No | No | No | No |
 
 RLS trong `supabase/migrations/002_rls.sql` là nguồn kiểm soát cuối cùng. Menu ẩn không được xem là biện pháp bảo mật.
+
+## Monthly payroll (v1.2.1)
+
+| Capability | Admin | Academic | Teacher | CSKH | Student |
+|---|---:|---:|---:|---:|---:|
+| View all teacher rates | Yes | No | No | No | No |
+| Set hourly rate | Yes | No | No | No | No |
+| View own hourly rate | N/A | No | Own only | No | No |
+| View payroll statement | All | No | Own only | No | No |
+| Teacher confirm/dispute payroll | No | No | Own only | No | No |
+| Approve payroll and create expense | Yes | No | No | No | No |
+| Mark payroll paid | Yes | No | No | No | No |
+| Import monthly financial balance | Yes | No | No | No | No |

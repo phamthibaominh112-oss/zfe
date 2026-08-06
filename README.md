@@ -149,3 +149,9 @@ New production modules:
 - Automatic tuition usage tracking from completed sessions.
 
 The notification center is an authenticated in-app notification channel. Native browser/phone push requires a separate Web Push provider and VAPID configuration.
+
+## v1.2.1 — Monthly payroll
+
+Run `supabase/migrations/006_monthly_payroll_and_financial_tracking.sql` after migration 005.
+
+The workflow is: completed sessions → month-end statement → teacher confirmation → admin approval → automatic expense posting. Admin can set hourly rates on Dashboard or `/payroll`. Monthly revenue/cost import is prepared with `public/templates/monthly_financial_summary_template.csv` and the staging table `import_monthly_financial_snapshots`.

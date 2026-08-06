@@ -1074,3 +1074,102 @@ export async function markAllNotificationsRead(_formData: FormData) {
   revalidatePath("/dashboard");
   go("/notifications", "Đã đánh dấu tất cả thông báo là đã đọc.");
 }
+
+// v1.2.1 — Monthly teacher payroll review and approval
+export async function updateTeacherHourlyRate(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const teacherId = text(formData.get("teacher_id"));
+  const month = text(formData.get("return_month"));
+  const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
+  const { error } = await supabase.rpc("update_teacher_compensation_rate", {
+    p_teacher_id: teacherId,
+    p_hourly_rate: toNumber(formData.get("hourly_rate")),
+    p_effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
+    p_note: text(formData.get("note")) || null
+  });
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+  revalidatePath("/finance/expenses");
+  go(target, "Đã cập nhật đơn giá giờ dạy. Giáo viên sẽ thấy mức mới trên tài khoản của mình.");
+}
+
+export async function generateTeacherPayrollMonth(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const month = text(formData.get("payroll_month"));
+  const monthDate = month.length === 7 ? `${month}-01` : month;
+  const { data, error } = await supabase.rpc("generate_teacher_payroll_statements", {
+    p_month: monthDate,
+    p_force: true
+  });
+  if (error) go(`/payroll?month=${month.slice(0, 7)}`, undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+  go(`/payroll?month=${month.slice(0, 7)}`, `Đã tổng kết hoặc cập nhật ${Number(data || 0)} bảng lương.`);
+}
+
+export async function teacherReviewPayroll(formData: FormData) {
+  await requireRole(["teacher"]);
+  const supabase = await createClient();
+  const statementId = text(formData.get("statement_id"));
+  const decision = text(formData.get("decision"));
+  const month = text(formData.get("return_month"));
+  const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
+  const { error } = await supabase.rpc("teacher_review_payroll", {
+    p_statement_id: statementId,
+    p_decision: decision,
+    p_note: text(formData.get("note")) || null
+  });
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+  go(target, decision === "Approved" ? "Bạn đã xác nhận số giờ và mức lương tháng." : "Đã gửi báo cáo sai lệch cho Admin.");
+}
+
+export async function adminApproveTeacherPayroll(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const statementId = text(formData.get("statement_id"));
+  const month = text(formData.get("return_month"));
+  const { error } = await supabase.rpc("admin_approve_teacher_payroll", {
+    p_statement_id: statementId,
+    p_admin_note: text(formData.get("admin_note")) || null,
+    p_mark_paid: text(formData.get("mark_paid")) === "true"
+  });
+  const target = month ? `/payroll?month=${month}` : "/payroll";
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  go(target, "Đã duyệt bảng lương và tự động ghi nhận vào chi phí tháng.");
+}
+
+export async function adminMarkTeacherPayrollPaid(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const statementId = text(formData.get("statement_id"));
+  const month = text(formData.get("return_month"));
+  const { error } = await supabase.rpc("admin_mark_teacher_payroll_paid", {
+    p_statement_id: statementId
+  });
+  const target = month ? `/payroll?month=${month}` : "/payroll";
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/payroll");
+  revalidatePath("/finance/expenses");
+  revalidatePath("/finance/reports");
+  go(target, "Đã đánh dấu bảng lương là đã thanh toán.");
+}
+
+export async function commitMonthlyFinancialImport() {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("commit_monthly_financial_import");
+  if (error) go("/finance/reports", undefined, error.message);
+  revalidatePath("/dashboard");
+  revalidatePath("/finance/reports");
+  go("/finance/reports", `Đã đồng bộ ${Number(data || 0)} tháng dữ liệu vào bảng cân đối.`);
+}

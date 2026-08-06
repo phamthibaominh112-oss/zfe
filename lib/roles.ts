@@ -46,6 +46,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/quality", label: "Chất lượng GV", short: "★" },
   { href: "/finance", label: "Thu phí & tài chính", short: "₫" },
   { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC" },
+  { href: "/payroll", label: "Lương giáo viên", short: "LG" },
   { href: "/catalog", label: "Chương trình", short: "PL" },
   { href: "/admin/users", label: "Người dùng & quyền", short: "⚙" }
 ];
@@ -66,7 +67,8 @@ const TEACHER_NAV: NavItem[] = [
   { href: "/classes", label: "Lớp của tôi", short: "▦" },
   { href: "/students", label: "Học viên của tôi", short: "HV" },
   { href: "/academic", label: "Điểm danh & bài tập", short: "✓" },
-  { href: "/quality", label: "Đánh giá của tôi", short: "★" }
+  { href: "/quality", label: "Đánh giá của tôi", short: "★" },
+  { href: "/payroll", label: "Lương tháng", short: "₫" }
 ];
 
 const CUSTOMER_SERVICE_NAV: NavItem[] = [
