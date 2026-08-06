@@ -1099,7 +1099,9 @@ export async function updateTeacherHourlyRate(formData: FormData) {
   const month = text(formData.get("return_month"));
   const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
   const hourlyRate = toNumber(formData.get("hourly_rate"));
-  if (hourlyRate <= 0) go(target, undefined, "Đơn giá giờ dạy phải lớn hơn 0.");
+  if (hourlyRate < 50000 || hourlyRate > 1500000) {
+    go(target, undefined, "Đơn giá giờ dạy phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
+  }
   const { error } = await supabase.rpc("update_teacher_compensation_rate", {
     p_teacher_id: teacherId,
     p_hourly_rate: hourlyRate,

@@ -153,7 +153,7 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
           <input type="hidden" name="return_month" value={range.month} />
           <input type="hidden" name="return_path" value={`/finance/expenses?month=${range.month}`} />
           <div><strong>{teacher.full_name}</strong><small>{teacher.code} · {rate > 0 ? formatMoney(rate) + "/giờ" : "Chưa thiết lập đơn giá"}</small></div>
-          <Field label="Đơn giá / giờ" name="hourly_rate" type="number" min="1" step="1000" defaultValue={rate || ""} required />
+          <Field label="Đơn giá / giờ (50.000–1.500.000đ)" name="hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={rate || ""} required />
           <Field label="Hiệu lực từ" name="effective_from" type="date" defaultValue={setting?.effective_from || range.start} required />
           <Field label="Ghi chú" name="note" defaultValue={setting?.note || ""} />
           <button className="button button-primary rate-save-button">Lưu đơn giá</button>
