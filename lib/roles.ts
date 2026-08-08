@@ -40,6 +40,7 @@ export type NavItem = {
 const ADMIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan", short: "⌂" },
   { href: "/schedule", label: "Lịch trung tâm", short: "◷" },
+  { href: "/workforce", label: "Chấm công & nhân sự", short: "CC" },
   { href: "/classes", label: "Lớp học", short: "▦" },
   { href: "/students", label: "Học viên", short: "HV" },
   { href: "/academic", label: "Học thuật", short: "✓" },
@@ -54,6 +55,7 @@ const ADMIN_NAV: NavItem[] = [
 const ACADEMIC_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan", short: "⌂" },
   { href: "/schedule", label: "Lịch trung tâm", short: "◷" },
+  { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/classes", label: "Lớp học", short: "▦" },
   { href: "/students", label: "Học viên", short: "HV" },
   { href: "/academic", label: "Điểm danh & học tập", short: "✓" },
@@ -64,6 +66,7 @@ const ACADEMIC_NAV: NavItem[] = [
 const TEACHER_NAV: NavItem[] = [
   { href: "/dashboard", label: "Hôm nay", short: "⌂" },
   { href: "/schedule", label: "Lịch dạy", short: "◷" },
+  { href: "/workforce", label: "Check-in & KPI", short: "KPI" },
   { href: "/classes", label: "Lớp của tôi", short: "▦" },
   { href: "/students", label: "Học viên của tôi", short: "HV" },
   { href: "/academic", label: "Điểm danh & bài tập", short: "✓" },
@@ -73,6 +76,7 @@ const TEACHER_NAV: NavItem[] = [
 
 const CUSTOMER_SERVICE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan CSKH", short: "⌂" },
+  { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/students", label: "Hồ sơ học viên", short: "HV" },
   { href: "/finance", label: "Thu phí & tái phí", short: "₫" },
   { href: "/classes", label: "Tình trạng lớp", short: "▦" }

@@ -106,6 +106,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       />
       <div className="quick-actions-grid">
         <QuickAction href="/schedule" icon="◷" title="Xếp lịch" description="Tạo session và kiểm tra lịch tuần" />
+        <QuickAction href="/workforce" icon="CC" title={profile.role === "admin" ? "Chấm công nhân sự" : "Lịch làm & chấm công"} description={profile.role === "admin" ? "Academic, CSKH và KPI giáo viên" : "Đăng ký ca và theo dõi giờ công"} tone="yellow" />
         <QuickAction href="/students" icon="HV" title="Xử lý học viên" description="Hồ sơ, lịch rảnh và xếp lớp" tone="yellow" />
         <QuickAction href="/academic" icon="✓" title="Duyệt học thuật" description="Attendance, điểm và feedback" tone="green" />
       </div>
@@ -155,7 +156,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const { data: teacher } = await supabase.from("teachers").select("id,full_name").eq("user_id", profile.id).single();
     const { data: classAssignments } = teacher ? await supabase.from("class_teachers").select("class_id,classes(id,code,name,status)").eq("teacher_id", teacher.id) : { data: [] as any[] };
     const classIds = (classAssignments || []).map((x: any) => x.class_id);
-    const [sessions, hours, feedback, observations, roster, payrollStatement, compensation, livePayroll] = await Promise.all([
+    const [sessions, hours, feedback, observations, roster, payrollStatement, compensation, livePayroll, kpiLive] = await Promise.all([
       classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(role,teachers(id,code,full_name))").in("class_id", classIds).gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).is("archived_at", null).order("scheduled_date").order("start_time") : Promise.resolve({ data: [] as any[] }),
       teacher ? supabase.from("teacher_monthly_hours").select("completed_hours").eq("teacher_id", teacher.id).eq("month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       supabase.from("progress_feedback").select("id,status,milestone,enrollments(students(full_name),classes(code))").eq("submitted_by", profile.id).order("updated_at", { ascending: false }).limit(8),
@@ -163,7 +164,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       classIds.length ? supabase.from("enrollments").select("class_id,status,students(id,code,full_name)").in("class_id", classIds).is("archived_at", null) : Promise.resolve({ data: [] as any[] }),
       teacher ? supabase.from("teacher_payroll_statements").select("id,completed_hours,hourly_rate_snapshot,gross_amount,teacher_status,admin_status").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       teacher ? supabase.from("teacher_compensation_settings").select("hourly_rate,effective_from").eq("teacher_id", teacher.id).maybeSingle() : Promise.resolve({ data: null as any }),
-      teacher ? supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any })
+      teacher ? supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
+      teacher ? supabase.from("teacher_kpi_live_monthly").select("overall_compliance_rate,punctuality_rate,assignment_compliance_rate,grading_compliance_rate").eq("teacher_id", teacher.id).eq("kpi_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any })
     ]);
     const teacherStudentMap = new Map<string, any>();
     for (const row of roster.data || []) {
@@ -175,7 +177,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const nextSession = (sessions.data || []).find((item: any) => item.scheduled_date >= today && !String(item.status).toLowerCase().includes("cancel"));
     const nextClass = joined(nextSession?.classes);
     const pendingFeedback = (feedback.data || []).filter((x: any) => !["Published", "Approved"].includes(x.status)).length;
-    const payrollHours = Number(payrollStatement.data?.completed_hours ?? livePayroll.data?.completed_hours ?? hours.data?.completed_hours ?? 0);
+    const payrollHours = Number(payrollStatement.data?.completed_hours ?? livePayroll.data?.completed_hours ?? 0);
     const payrollRate = Number(payrollStatement.data?.hourly_rate_snapshot ?? livePayroll.data?.hourly_rate ?? compensation.data?.hourly_rate ?? 0);
     const payrollAmount = Number(payrollStatement.data?.gross_amount ?? livePayroll.data?.estimated_payroll ?? payrollHours * payrollRate);
 
@@ -186,20 +188,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         label={`${todaySessions.length} buổi hôm nay · ${(sessions.data || []).length} buổi trong tuần`}
         title={nextSession ? `${nextSession.start_time?.slice(0,5)} · ${nextClass?.code || "Lớp học"}` : "Hôm nay bạn chưa có lịch dạy"}
         description={nextSession ? `${nextClass?.name || "Buổi học"} · Buổi ${nextSession.session_no || "—"}` : "Kiểm tra lịch tuần hoặc cập nhật lịch rảnh cho học vụ."}
-        meta={<><span>{classIds.length} lớp phụ trách</span><span>{teacherStudents.length} học viên</span><span>{Number(hours.data?.completed_hours || 0).toLocaleString("vi-VN")} giờ tháng này</span></>}
-        actions={<><Link className="button button-yellow" href="/academic">Điểm danh & bài tập</Link><Link className="button hero-secondary" href="/schedule">Xem lịch tuần</Link></>}
+        meta={<><span>{classIds.length} lớp phụ trách</span><span>{teacherStudents.length} học viên</span><span>{payrollHours.toLocaleString("vi-VN")} giờ đủ điều kiện lương</span></>}
+        actions={<><Link className="button button-yellow" href="/workforce">Check-in buổi dạy</Link><Link className="button hero-secondary" href="/schedule">Xem lịch tuần</Link></>}
       />
       <div className="quick-actions-grid">
-        <QuickAction href="/academic" icon="✓" title="Điểm danh" description="Cập nhật attendance và homework" />
+        <QuickAction href="/workforce" icon="KPI" title="Check-in & KPI" description="Chấm công buổi dạy và xem KPI tuân thủ" />
+        <QuickAction href="/academic" icon="✓" title="Điểm danh & bài tập" description="Attendance, BTVN và chấm chữa" />
         <QuickAction href="/schedule" icon="◷" title="Lịch rảnh" description="Book lịch rảnh cho các tuần tới" tone="yellow" />
-        <QuickAction href="/classes" icon="▦" title="Lớp của tôi" description="Tiến độ lớp và danh sách HV" tone="green" />
         <QuickAction href="/payroll" icon="₫" title="Lương tháng" description={`${payrollHours.toLocaleString("vi-VN")} giờ · ${formatMoney(payrollAmount)}`} tone="green" />
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Lớp phụ trách" value={classIds.length} />
         <MetricCard label="Buổi tuần này" value={(sessions.data || []).length} tone="yellow" />
-        <MetricCard label="Giờ hoàn thành tháng" value={`${Number(hours.data?.completed_hours || 0).toLocaleString("vi-VN")}h`} tone="green" />
-        <MetricCard label="Feedback cần xử lý" value={pendingFeedback} tone={pendingFeedback ? "red" : "neutral"} />
+        <MetricCard label="Giờ đủ điều kiện lương" value={`${payrollHours.toLocaleString("vi-VN")}h`} note="Từ ngày áp dụng: cần Check-in/Check-out" tone="green" />
+        <MetricCard label="KPI tuân thủ tháng" value={kpiLive.data?.overall_compliance_rate == null ? "—" : `${Number(kpiLive.data.overall_compliance_rate).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%`} note={kpiLive.data ? `P ${Number(kpiLive.data.punctuality_rate || 0).toFixed(0)}% · BT ${Number(kpiLive.data.assignment_compliance_rate || 0).toFixed(0)}% · Chấm ${Number(kpiLive.data.grading_compliance_rate || 0).toFixed(0)}%` : "Chưa có dữ liệu KPI"} tone="yellow" />
       </div>
       <Panel className="section-gap" title="Tổng kết lương tháng" description={payrollStatement.data ? "Bảng lương đã được chốt; vui lòng kiểm tra và xác nhận." : "Số liệu đang tạm tính và sẽ tự chốt vào ngày cuối tháng."} action={<Link className="text-link" href="/payroll">Xem chi tiết →</Link>}>
         <div className="payroll-dashboard-summary"><div><span>Giờ hoàn thành</span><strong>{payrollHours.toLocaleString("vi-VN")}h</strong></div><div><span>Đơn giá</span><strong>{formatMoney(payrollRate)}</strong></div><div><span>{payrollStatement.data?.teacher_status === "Approved" ? "Mức lương đã xác nhận" : "Mức lương dự kiến"}</span><strong>{formatMoney(payrollAmount)}</strong></div><div><span>Trạng thái</span><Status value={payrollStatement.data?.teacher_status || "Chưa mở"}/></div></div>
@@ -248,6 +250,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         actions={<><Link className="button button-yellow" href="/finance">Mở danh sách tái phí</Link><Link className="button hero-secondary" href="/students">Hồ sơ học viên</Link></>}
       />
       <div className="quick-actions-grid">
+        <QuickAction href="/workforce" icon="CC" title="Lịch làm & chấm công" description="Đăng ký ca, Check-in/Check-out và giờ công" />
         <QuickAction href="/students" icon="+" title="Thêm học viên" description="Tạo hồ sơ và nhập lịch rảnh" />
         <QuickAction href="/finance" icon="₫" title="Ghi nhận thanh toán" description="Cập nhật tiền đóng và công nợ" tone="yellow" />
         <QuickAction href="/finance" icon="↻" title="Tái phí" description="Theo dõi và tạo follow-up" tone="green" />

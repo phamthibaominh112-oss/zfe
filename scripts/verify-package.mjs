@@ -16,7 +16,11 @@ const required = [
   "supabase/migrations/005_finance_accounting_notifications.sql",
   "supabase/migrations/006_monthly_payroll_and_financial_tracking.sql",
   "supabase/migrations/007_expense_categories_and_payroll_guard.sql",
-  "app/(protected)/payroll/page.tsx"
+  "supabase/migrations/008_teacher_hourly_rate_range.sql",
+  "supabase/migrations/009_workforce_checkin_compliance.sql",
+  "app/(protected)/payroll/page.tsx",
+  "app/(protected)/workforce/page.tsx",
+  "app/(protected)/workforce/kpi/page.tsx"
 ];
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing ${file}`);
@@ -62,6 +66,21 @@ for (const marker of ["teacher_compensation_settings", "teacher_payroll_statemen
 const expenseCategoryMigration = read("supabase/migrations/007_expense_categories_and_payroll_guard.sql");
 for (const marker of ["cost_type", "Lương giảng viên", "Nền tảng / Phần mềm", "Vui lòng nhập đơn giá giờ dạy lớn hơn 0"])
   if (!expenseCategoryMigration.includes(marker)) failures.push(`Missing expense category/payroll guard marker: ${marker}`);
+
+
+const workforceMigration = read("supabase/migrations/009_workforce_checkin_compliance.sql");
+for (const marker of [
+  "teacher_session_checkins",
+  "staff_work_schedules",
+  "staff_work_logs",
+  "teacher_kpi_live_monthly",
+  "teacher_check_in_session",
+  "teacher_check_out_session",
+  "staff_check_in",
+  "staff_check_out",
+  "staff_payroll_statements",
+  "admin_approve_staff_payroll"
+]) if (!workforceMigration.includes(marker)) failures.push(`Missing workforce/compliance marker: ${marker}`);
 
 for (const file of ["app/(protected)/students/page.tsx", "app/(protected)/students/[id]/page.tsx"]) {
   if (/\.select\(select\)/.test(read(file))) failures.push(`Dynamic Supabase select remains in ${file}`);

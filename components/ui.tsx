@@ -47,10 +47,13 @@ const STATUS_LABELS: Record<string, string> = {
   "call back": "Hẹn liên hệ lại",
   renewed: "Đã tái phí",
   "not renewing": "Không tái phí",
-  "pending review": "Chờ GV xác nhận",
+  "pending review": "Chờ xác nhận",
   disputed: "Có sai lệch",
   "chưa mở": "Chưa mở",
-  "chưa tạo": "Chưa tạo"
+  "chưa tạo": "Chưa tạo",
+  "checked in": "Đã check-in",
+  adjusted: "Đã điều chỉnh",
+  planned: "Đã đăng ký"
 };
 
 export function Status({ value }: { value: string | null | undefined }) {

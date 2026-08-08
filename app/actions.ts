@@ -1193,3 +1193,159 @@ export async function commitMonthlyFinancialImport() {
   revalidatePath("/finance/reports");
   go("/finance/reports", `Đã đồng bộ ${Number(data || 0)} tháng dữ liệu vào bảng cân đối.`);
 }
+
+// v1.3.0 — Workforce scheduling, clock-in/out, staff payroll and teacher KPI
+export async function teacherSessionCheckIn(formData: FormData) {
+  await requireRole(["teacher"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const returnPath = text(formData.get("return_path")) || "/workforce";
+  const { error } = await supabase.rpc("teacher_check_in_session", { p_session_id: sessionId });
+  if (error) go(returnPath, undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/dashboard");
+  revalidatePath("/academic");
+  go(returnPath, "Đã check-in buổi dạy.");
+}
+
+export async function teacherSessionCheckOut(formData: FormData) {
+  await requireRole(["teacher"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const returnPath = text(formData.get("return_path")) || "/workforce";
+  const { error } = await supabase.rpc("teacher_check_out_session", {
+    p_session_id: sessionId,
+    p_topic: text(formData.get("topic")) || null
+  });
+  if (error) go(returnPath, undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/dashboard");
+  revalidatePath("/academic");
+  revalidatePath("/payroll");
+  go(returnPath, "Đã check-out và hoàn tất buổi dạy. Buổi học đủ điều kiện tính lương nếu đúng quy định chấm công.");
+}
+
+export async function createStaffWorkSchedule(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const userId = profile.role === "admin" ? text(formData.get("user_id")) : profile.id;
+  if (!userId) go("/workforce", undefined, "Vui lòng chọn nhân sự.");
+  const { data: staffProfile, error: staffError } = await supabase.from("profiles").select("id,role").eq("id", userId).maybeSingle();
+  if (staffError || !staffProfile || !["academic_manager", "customer_service"].includes(String(staffProfile.role))) {
+    go("/workforce", undefined, staffError?.message || "Chỉ Academic và CSKH mới đăng ký lịch làm tại đây.");
+  }
+  const { error } = await supabase.from("staff_work_schedules").insert({
+    user_id: userId,
+    role: staffProfile.role,
+    work_date: text(formData.get("work_date")),
+    start_time: text(formData.get("start_time")),
+    end_time: text(formData.get("end_time")),
+    work_mode: text(formData.get("work_mode")) || "Office",
+    location: text(formData.get("location")) || null,
+    note: text(formData.get("note")) || null,
+    status: profile.role === "admin" ? "Approved" : "Planned",
+    created_by: profile.id,
+    approved_by: profile.role === "admin" ? profile.id : null,
+    approved_at: profile.role === "admin" ? new Date().toISOString() : null
+  });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/dashboard");
+  go("/workforce", "Đã đăng ký lịch làm.");
+}
+
+export async function staffWorkCheckIn(formData: FormData) {
+  await requireRole(["academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("staff_check_in", { p_schedule_id: text(formData.get("schedule_id")) });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/dashboard");
+  go("/workforce", "Đã check-in ca làm.");
+}
+
+export async function staffWorkCheckOut(formData: FormData) {
+  await requireRole(["academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("staff_check_out", { p_schedule_id: text(formData.get("schedule_id")) });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/dashboard");
+  go("/workforce", "Đã check-out ca làm. Giờ công đã được cập nhật.");
+}
+
+export async function updateStaffHourlyRate(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const hourlyRate = toNumber(formData.get("hourly_rate"));
+  if (hourlyRate < 20000 || hourlyRate > 1500000) go("/workforce", undefined, "Đơn giá nhân sự phải từ 20.000 đến 1.500.000đ/giờ.");
+  const { error } = await supabase.rpc("update_staff_compensation_rate", {
+    p_user_id: text(formData.get("user_id")),
+    p_hourly_rate: hourlyRate,
+    p_effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
+    p_note: text(formData.get("note")) || null
+  });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/finance/expenses");
+  go("/workforce", "Đã cập nhật đơn giá nhân sự.");
+}
+
+export async function generateStaffPayrollMonth(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const month = text(formData.get("payroll_month"));
+  const monthDate = /^\d{4}-\d{2}$/.test(month) ? `${month}-01` : month;
+  const { data, error } = await supabase.rpc("generate_staff_payroll_statements", { p_month: monthDate, p_force: true });
+  if (error) go(`/workforce?month=${month.slice(0, 7)}`, undefined, error.message);
+  revalidatePath("/workforce");
+  go(`/workforce?month=${month.slice(0, 7)}`, `Đã tổng kết hoặc cập nhật ${Number(data || 0)} bảng lương nhân sự.`);
+}
+
+export async function staffReviewPayroll(formData: FormData) {
+  await requireRole(["academic_manager", "customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("staff_review_payroll", {
+    p_statement_id: text(formData.get("statement_id")),
+    p_decision: text(formData.get("decision")),
+    p_note: text(formData.get("note")) || null
+  });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  go("/workforce", text(formData.get("decision")) === "Approved" ? "Đã xác nhận bảng công và mức lương." : "Đã gửi yêu cầu kiểm tra bảng công.");
+}
+
+export async function adminApproveStaffPayroll(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_approve_staff_payroll", {
+    p_statement_id: text(formData.get("statement_id")),
+    p_admin_note: text(formData.get("note")) || null,
+    p_mark_paid: false
+  });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/finance/expenses");
+  go("/workforce", "Đã duyệt lương nhân sự và ghi vào bảng chi phí.");
+}
+
+export async function adminMarkStaffPayrollPaid(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_mark_staff_payroll_paid", { p_statement_id: text(formData.get("statement_id")) });
+  if (error) go("/workforce", undefined, error.message);
+  revalidatePath("/workforce");
+  revalidatePath("/finance/expenses");
+  go("/workforce", "Đã đánh dấu lương nhân sự là đã thanh toán.");
+}
+
+export async function generateTeacherKpiMonth(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const month = text(formData.get("kpi_month"));
+  const monthDate = /^\d{4}-\d{2}$/.test(month) ? `${month}-01` : month;
+  const { data, error } = await supabase.rpc("generate_teacher_kpi_snapshots", { p_month: monthDate, p_force: true });
+  if (error) go(`/workforce/kpi?month=${month.slice(0, 7)}`, undefined, error.message);
+  revalidatePath("/workforce/kpi");
+  go(`/workforce/kpi?month=${month.slice(0, 7)}`, `Đã cập nhật KPI cho ${Number(data || 0)} giáo viên.`);
+}

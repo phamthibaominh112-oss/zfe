@@ -789,3 +789,67 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .rate-setting-card > * { grid-column: 1 !important; }
   .rate-setting-card .rate-save-button { max-width: none; justify-self: stretch; }
 }
+
+/* v1.3.0 — Workforce, clock-in/out and teacher compliance KPI */
+.workforce-session-list { display:grid; gap:10px; }
+.workforce-session-card {
+  display:grid; grid-template-columns:minmax(220px,1.4fr) minmax(150px,.8fr) minmax(150px,.8fr) minmax(190px,1fr);
+  gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:15px; background:#fff;
+}
+.workforce-session-main > span,.workforce-session-main > strong,.workforce-session-main > small,
+.workforce-clock-state > span,.workforce-clock-state > strong,.workforce-clock-state > small { display:block; }
+.workforce-session-main > span { color:var(--brand-blue); font-size:9px; font-weight:950; }
+.workforce-session-main > strong { margin-top:4px; font-size:12px; }
+.workforce-session-main > small,.workforce-clock-state > small { margin-top:4px; color:var(--muted); font-size:8px; }
+.workforce-clock-state { padding:10px 12px; border-radius:12px; background:#f8faff; }
+.workforce-clock-state > span { color:var(--muted); font-size:7px; font-weight:950; text-transform:uppercase; letter-spacing:.5px; }
+.workforce-clock-state > strong { margin-top:4px; font-size:9px; }
+.workforce-clock-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; align-items:center; }
+.workforce-checkout-form { width:100%; display:grid; gap:7px; }
+.text-danger { color:var(--red) !important; }
+.compliance-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.compliance-grid > div { padding:15px; border:1px solid var(--line); border-radius:14px; background:#f8faff; }
+.compliance-grid span,.compliance-grid strong,.compliance-grid small { display:block; }
+.compliance-grid span { color:var(--muted); font-size:8px; font-weight:950; text-transform:uppercase; }
+.compliance-grid strong { margin-top:6px; font-size:22px; color:var(--brand-blue); }
+.compliance-grid small { margin-top:5px; color:var(--muted); font-size:8px; }
+.compliance-grid .compliance-overall { background:linear-gradient(135deg,var(--brand-blue),#3653ff); color:#fff; border-color:transparent; }
+.compliance-grid .compliance-overall span,.compliance-grid .compliance-overall small { color:rgba(255,255,255,.75); }
+.compliance-grid .compliance-overall strong { color:#fff; }
+.policy-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.policy-cards > div { position:relative; padding:15px 15px 15px 52px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+.policy-cards b { position:absolute; left:13px; top:14px; width:28px; height:28px; display:grid; place-items:center; border-radius:9px; background:var(--brand-yellow); color:#17204a; font-size:10px; }
+.policy-cards strong,.policy-cards span { display:block; }
+.policy-cards strong { font-size:10px; }
+.policy-cards span { margin-top:5px; color:var(--muted); font-size:8px; line-height:1.5; }
+.panel-toolbar { display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px; }
+.kpi-report-meta { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 16px; margin-bottom:14px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+.kpi-report-meta img { width:120px; height:auto; }
+.kpi-report-meta > div { text-align:right; }
+.kpi-report-meta strong,.kpi-report-meta span { display:block; }
+.kpi-report-meta strong { font-size:12px; }
+.kpi-report-meta span { margin-top:3px; color:var(--muted); font-size:8px; }
+.kpi-print-footer { margin:18px 0 4px; padding-top:10px; border-top:1px solid var(--line); color:var(--muted); font-size:8px; text-align:center; }
+
+@media (max-width:1050px) {
+  .workforce-session-card { grid-template-columns:1fr 1fr; }
+  .workforce-session-main,.workforce-clock-actions { grid-column:1/-1; }
+  .workforce-clock-actions { justify-content:flex-start; }
+  .compliance-grid { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:700px) {
+  .workforce-session-card,.compliance-grid,.policy-cards { grid-template-columns:1fr; }
+  .workforce-session-main,.workforce-clock-actions { grid-column:auto; }
+  .kpi-report-meta { align-items:flex-start; flex-direction:column; }
+  .kpi-report-meta > div { text-align:left; }
+}
+@media print {
+  .kpi-report .page-header { margin-bottom:8px; }
+  .kpi-report .panel { break-inside:avoid; box-shadow:none; }
+  .kpi-report .metric-card { box-shadow:none; }
+  .kpi-report .table-wrap { overflow:visible; }
+  .kpi-report table { min-width:0 !important; font-size:7px; }
+  .kpi-report th,.kpi-report td { padding:6px; }
+  .kpi-report .kpi-report-meta { border:0; border-bottom:2px solid #2038e5; border-radius:0; padding:0 0 10px; }
+  .kpi-report .kpi-print-footer { display:block; }
+}
