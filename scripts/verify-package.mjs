@@ -44,6 +44,10 @@ for (const name of ["ADMIN_NAV", "ACADEMIC_NAV", "CUSTOMER_SERVICE_NAV"]) if (!r
 for (const name of ["TEACHER_NAV", "STUDENT_NAV"]) if (roleBlock(name).includes('href: "/sop"')) failures.push(`SOP navigation leaked to ${name}`);
 const sopPage = read("app/(protected)/sop/page.tsx");
 if (!sopPage.includes('requireRole(["admin", "academic_manager", "customer_service"])')) failures.push("SOP route role guard missing");
+const handbookViewer = read("components/handbook-viewer.tsx");
+if (/srcDoc\s*=/.test(handbookViewer)) failures.push("SOP handbook must not use server-rendered iframe srcDoc");
+if (!handbookViewer.includes("doc.write(html)")) failures.push("SOP handbook client-side document writer missing");
+if (!handbookViewer.includes("data-ze-centeros-embed")) failures.push("SOP embedded handbook layout override missing");
 const rls = read("supabase/migrations/002_rls.sql");
 for (const marker of [
   "tuition_select",
