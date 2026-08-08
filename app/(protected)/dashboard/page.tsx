@@ -109,6 +109,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/workforce" icon="CC" title={profile.role === "admin" ? "Chấm công nhân sự" : "Lịch làm & chấm công"} description={profile.role === "admin" ? "Academic, CSKH và KPI giáo viên" : "Đăng ký ca và theo dõi giờ công"} tone="yellow" />
         <QuickAction href="/students" icon="HV" title="Xử lý học viên" description="Hồ sơ, lịch rảnh và xếp lớp" tone="yellow" />
         <QuickAction href="/academic" icon="✓" title="Duyệt học thuật" description="Attendance, điểm và feedback" tone="green" />
+        <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Quy trình, Placement Test và hướng dẫn vận hành" />
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Học viên" value={students.count || 0} note={`${waitingStudents.count || 0} đang chờ xếp lớp`} />
@@ -254,6 +255,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/students" icon="+" title="Thêm học viên" description="Tạo hồ sơ và nhập lịch rảnh" />
         <QuickAction href="/finance" icon="₫" title="Ghi nhận thanh toán" description="Cập nhật tiền đóng và công nợ" tone="yellow" />
         <QuickAction href="/finance" icon="↻" title="Tái phí" description="Theo dõi và tạo follow-up" tone="green" />
+        <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Xem lại quy trình và hướng dẫn thao tác" />
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Hồ sơ học viên" value={students.count || 0} />

@@ -20,7 +20,10 @@ const required = [
   "supabase/migrations/009_workforce_checkin_compliance.sql",
   "app/(protected)/payroll/page.tsx",
   "app/(protected)/workforce/page.tsx",
-  "app/(protected)/workforce/kpi/page.tsx"
+  "app/(protected)/workforce/kpi/page.tsx",
+  "app/(protected)/sop/page.tsx",
+  "components/handbook-viewer.tsx",
+  "content/handbooks/master-training-handbook.ts"
 ];
 const failures = [];
 for (const file of required) if (!fs.existsSync(path.join(root, file))) failures.push(`Missing ${file}`);
@@ -36,6 +39,11 @@ if (envTemplate) {
 }
 const roles = read("lib/roles.ts");
 if (/finance[^\n]+academic_manager|finance[^\n]+teacher/.test(roles)) failures.push("Finance route leaked to academic/teacher role");
+const roleBlock = (name) => roles.match(new RegExp(`const ${name}: NavItem\\[] = \\[([\\s\\S]*?)\\];`))?.[1] || "";
+for (const name of ["ADMIN_NAV", "ACADEMIC_NAV", "CUSTOMER_SERVICE_NAV"]) if (!roleBlock(name).includes('href: "/sop"')) failures.push(`SOP navigation missing for ${name}`);
+for (const name of ["TEACHER_NAV", "STUDENT_NAV"]) if (roleBlock(name).includes('href: "/sop"')) failures.push(`SOP navigation leaked to ${name}`);
+const sopPage = read("app/(protected)/sop/page.tsx");
+if (!sopPage.includes('requireRole(["admin", "academic_manager", "customer_service"])')) failures.push("SOP route role guard missing");
 const rls = read("supabase/migrations/002_rls.sql");
 for (const marker of [
   "tuition_select",
@@ -105,3 +113,4 @@ console.log("- Production authentication only");
 console.log("- RBAC navigation checked");
 console.log("- Supabase RLS markers checked");
 console.log("- Finance route isolated from teacher/academic roles");
+console.log("- SOP library restricted to Admin/Academic/CSKH");

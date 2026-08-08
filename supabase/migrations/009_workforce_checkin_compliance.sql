@@ -1,4 +1,5 @@
--- ZE CenterOS v1.3.0
+-- ZE CenterOS v1.3.0 FIXED
+-- Fix: preserve teacher_payroll_live_monthly existing columns during CREATE OR REPLACE VIEW.
 -- Workforce scheduling, teacher session check-in/out, compliance KPI and staff payroll.
 -- Safe to run after migrations 001-008.
 
@@ -640,7 +641,11 @@ $$;
 -- ---------------------------------------------------------------------------
 create or replace view public.teacher_payroll_live_monthly with (security_invoker=true) as
 select
+  -- IMPORTANT: keep the existing view column order/name from migration 006.
+  -- PostgreSQL CREATE OR REPLACE VIEW cannot remove existing columns.
   t.id teacher_id,
+  t.code teacher_code,
+  t.full_name teacher_name,
   date_trunc('month',s.scheduled_date)::date payroll_month,
   round(sum(s.duration_hours*st.payroll_factor),2) completed_hours,
   coalesce(cs.hourly_rate,0) hourly_rate,
@@ -651,16 +656,25 @@ join public.sessions s on s.id=st.session_id
 cross join public.workforce_settings ws
 left join public.teacher_compensation_settings cs on cs.teacher_id=t.id
 left join public.teacher_session_checkins ci on ci.session_id=s.id and ci.teacher_id=t.id
-where s.archived_at is null
+where t.archived_at is null
+  and s.archived_at is null
   and s.status in ('Completed','Make-up completed')
   and (
+    -- Historical completed sessions before workforce check-in started remain payable.
     s.scheduled_date < ws.teacher_checkin_effective_from
     or (
-      ci.check_in_at is not null and ci.check_out_at is not null
-      and ci.check_out_at >= ((s.scheduled_date+s.end_time) at time zone 'Asia/Ho_Chi_Minh') - (ws.checkout_early_tolerance_minutes*interval '1 minute')
+      ci.check_in_at is not null
+      and ci.check_out_at is not null
+      and ci.check_out_at >= ((s.scheduled_date+s.end_time) at time zone 'Asia/Ho_Chi_Minh')
+          - (ws.checkout_early_tolerance_minutes*interval '1 minute')
     )
   )
-group by t.id,date_trunc('month',s.scheduled_date)::date,cs.hourly_rate;
+group by
+  t.id,
+  t.code,
+  t.full_name,
+  date_trunc('month',s.scheduled_date)::date,
+  cs.hourly_rate;
 
 create or replace function public.generate_teacher_payroll_statements(p_month date,p_force boolean default false)
 returns integer

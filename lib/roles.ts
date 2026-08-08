@@ -49,6 +49,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC" },
   { href: "/payroll", label: "Lương giáo viên", short: "LG" },
   { href: "/catalog", label: "Chương trình", short: "PL" },
+  { href: "/sop", label: "SOP & Training", short: "SOP" },
   { href: "/admin/users", label: "Người dùng & quyền", short: "⚙" }
 ];
 
@@ -60,7 +61,8 @@ const ACADEMIC_NAV: NavItem[] = [
   { href: "/students", label: "Học viên", short: "HV" },
   { href: "/academic", label: "Điểm danh & học tập", short: "✓" },
   { href: "/quality", label: "Chất lượng GV", short: "★" },
-  { href: "/catalog", label: "Chương trình", short: "PL" }
+  { href: "/catalog", label: "Chương trình", short: "PL" },
+  { href: "/sop", label: "SOP & Training", short: "SOP" }
 ];
 
 const TEACHER_NAV: NavItem[] = [
@@ -79,7 +81,8 @@ const CUSTOMER_SERVICE_NAV: NavItem[] = [
   { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/students", label: "Hồ sơ học viên", short: "HV" },
   { href: "/finance", label: "Thu phí & tái phí", short: "₫" },
-  { href: "/classes", label: "Tình trạng lớp", short: "▦" }
+  { href: "/classes", label: "Tình trạng lớp", short: "▦" },
+  { href: "/sop", label: "SOP & Training", short: "SOP" }
 ];
 
 const STUDENT_NAV: NavItem[] = [
