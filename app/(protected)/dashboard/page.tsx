@@ -39,7 +39,7 @@ function SessionList({ sessions, emptyTitle, emptyDescription }: { sessions: any
   if (!sessions.length) return <Empty title={emptyTitle} description={emptyDescription} />;
   return <div className="agenda-list">{sessions.map((item: any) => {
     const classRow = joined(item.classes);
-    return <div className="agenda-item" key={item.id}><div className="agenda-time"><strong>{item.start_time?.slice(0,5) || "—"}</strong><span>{formatDate(item.scheduled_date)}</span></div><div className="agenda-main"><strong>{classRow?.code || "Lớp"} · Buổi {item.session_no || "—"}</strong><span>{classRow?.name || item.topic || "Buổi học"} · {teacherNames(item)}</span></div><Status value={item.status} /></div>;
+    return <div className="agenda-item" key={item.id}><div className="agenda-time"><strong>{item.start_time?.slice(0,5) || "—"}</strong><span>{formatDate(item.scheduled_date)}</span></div><div className="agenda-main"><strong>{classRow?.code || "Lớp"} · {sessionDisplayLabel(item.status,item.session_no)}</strong><span>{classRow?.name || item.topic || "Buổi học"} · {teacherNames(item)}</span></div><Status value={item.status} /></div>;
   })}</div>;
 }
 

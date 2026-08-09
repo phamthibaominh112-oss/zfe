@@ -2,7 +2,7 @@ import { archiveSessionSchedule, createSession, createTeacherAvailability, delet
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
-import { formatDate } from "@/lib/format";
+import { formatDate, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayString, vietnamWeek } from "@/lib/vietnam-date";
 import { createClient } from "@/lib/supabase/server";
 
@@ -95,9 +95,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     </FormGrid></form></FormDetails> : null}
     {canManage ? <FormDetails title="Tạo buổi học"><form action={createSession}><FormGrid>
       <SelectField label="Lớp" name="class_id" required options={(classes.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.name}`}))}/>
-      <Field label="Số buổi" name="session_no" type="number" required/><Field label="Ngày" name="scheduled_date" type="date" required/>
+      <Field label="Số buổi học thực tế" name="session_no" type="number" required/><Field label="Ngày" name="scheduled_date" type="date" required/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/><Field label="Số giờ" name="duration_hours" type="number" step="0.25" required/>
-      <SelectField label="Hình thức" name="mode" required options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><SelectField label="Giáo viên" name="teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+      <SelectField label="Hình thức" name="mode" required options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><SelectField label="Giáo viên chính" name="teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
       <Field label="Cơ sở" name="campus"/><Field label="Phòng" name="room"/><Field label="Link lớp" name="meeting_url"/><Field label="Nội dung" name="topic"/>
       <div className="form-actions"><button className="button button-primary">Tạo buổi học</button></div>
     </FormGrid></form></FormDetails> : null}
@@ -146,12 +146,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             <div className="day-events">{items.length ? items.map((item:any)=>{
               const classRow = joined(item.classes);
               const teacherLinks = item.session_teachers || [];
-              const teacherText = teacherLinks.map((x:any)=>joined(x.teachers)?.full_name).filter(Boolean).join(", ") || "Chưa phân GV";
               const mainTeacherLink = teacherLinks.find((x:any)=>x.role === "Main teacher") || teacherLinks[0];
+              const assistantTeacherLink = teacherLinks.find((x:any)=>x.role === "Assistant");
               const mainTeacher = joined(mainTeacherLink?.teachers);
+              const assistantTeacher = joined(assistantTeacherLink?.teachers);
+              const teacherText = mainTeacher ? `GV: ${mainTeacher.full_name}${assistantTeacher ? ` · TA: ${assistantTeacher.full_name}` : ""}` : "Chưa phân GV";
               return <article className={`session-card ${item.mode === "Offline" ? "offline" : ""}`} key={item.id}>
                 <div className="session-time-row"><strong>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</strong><span>{item.duration_hours}h</span></div>
-                <h3>{classRow?.code || "Lớp"} · Buổi {item.session_no}</h3>
+                <h3>{classRow?.code || "Lớp"} · {sessionDisplayLabel(item.status,item.session_no)}</h3>
                 <p>{classRow?.name || item.topic || "Buổi học"}</p>
                 <small>{teacherText}</small>
                 <div className="session-footer"><span className={`mode-dot ${item.mode === "Offline" ? "offline" : ""}`}>{item.mode}</span><Status value={item.status}/></div>
@@ -160,13 +162,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   <summary>Điều chỉnh lịch</summary>
                   <div className="session-manage-body">
                     <form action={updateSessionSchedule}><input type="hidden" name="session_id" value={item.id}/><FormGrid>
-                      <Field label="Số buổi" name="session_no" type="number" required defaultValue={item.session_no}/>
+                      <Field label="Số buổi học thực tế" name="session_no" type="number" required defaultValue={item.session_no}/>
                       <Field label="Ngày dạy" name="scheduled_date" type="date" required defaultValue={item.scheduled_date}/>
                       <Field label="Bắt đầu" name="start_time" type="time" required defaultValue={item.start_time?.slice(0,5)}/>
                       <Field label="Kết thúc" name="end_time" type="time" required defaultValue={item.end_time?.slice(0,5)}/>
                       <Field label="Số giờ" name="duration_hours" type="number" step="0.25" required defaultValue={item.duration_hours}/>
                       <SelectField label="Hình thức" name="mode" required defaultValue={item.mode} options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/>
-                      <SelectField label="Giáo viên chính" name="teacher_id" defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                      <SelectField label="Giáo viên chính" name="teacher_id" defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
                       <SelectField label="Trạng thái" name="status" required defaultValue={item.status} options={["Scheduled","Rescheduled","Cancelled","Make-up required","Make-up completed"].map(v=>({value:v,label:v}))}/>
                       <Field label="Cơ sở" name="campus" defaultValue={item.campus || ""}/>
                       <Field label="Phòng" name="room" defaultValue={item.room || ""}/>

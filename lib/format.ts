@@ -21,3 +21,9 @@ export function toNumber(value: FormDataEntryValue | null, fallback = 0) {
 export function text(value: FormDataEntryValue | null) {
   return String(value || "").trim();
 }
+
+
+export function sessionDisplayLabel(status: string | null | undefined, sessionNo: number | string | null | undefined) {
+  if (status === "Cancelled") return "Buổi hủy · không tính số";
+  return `Buổi ${sessionNo || "—"}`;
+}

@@ -151,14 +151,73 @@ export async function updateClass(formData: FormData) {
   go(`/classes/${classId}`, "Đã cập nhật lớp học.");
 }
 
+export async function setClassTeachingTeam(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const classId = text(formData.get("class_id"));
+  const mainTeacherId = text(formData.get("main_teacher_id"));
+  const assistantTeacherId = text(formData.get("assistant_teacher_id"));
+
+  if (!mainTeacherId) go(`/classes/${classId}`, undefined, "Vui lòng chọn Giáo viên chính.");
+  if (assistantTeacherId && assistantTeacherId === mainTeacherId) {
+    go(`/classes/${classId}`, undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+  }
+
+  const { error: removeError } = await supabase
+    .from("class_teachers")
+    .delete()
+    .eq("class_id", classId)
+    .in("role", ["Main teacher", "Assistant"]);
+  if (removeError) go(`/classes/${classId}`, undefined, removeError.message);
+
+  const rows: Array<Record<string, unknown>> = [{
+    class_id: classId,
+    teacher_id: mainTeacherId,
+    role: "Main teacher",
+    payroll_factor: toNumber(formData.get("main_payroll_factor"), 1)
+  }];
+
+  if (assistantTeacherId) rows.push({
+    class_id: classId,
+    teacher_id: assistantTeacherId,
+    role: "Assistant",
+    payroll_factor: toNumber(formData.get("assistant_payroll_factor"), 1)
+  });
+
+  const { error: insertError } = await supabase.from("class_teachers").insert(rows);
+  if (insertError) go(`/classes/${classId}`, undefined, insertError.message);
+
+  revalidatePath(`/classes/${classId}`);
+  revalidatePath("/classes");
+  revalidatePath("/schedule");
+  revalidatePath("/dashboard");
+  go(`/classes/${classId}`, assistantTeacherId
+    ? "Đã cập nhật Giáo viên chính và Trợ giảng của lớp."
+    : "Đã cập nhật Giáo viên chính. Lớp hiện chưa có Trợ giảng.");
+}
+
+// Backward-compatible action for any older form still using assignTeacher.
 export async function assignTeacher(formData: FormData) {
   await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
   const classId = text(formData.get("class_id"));
+  const role = text(formData.get("role")) || "Main teacher";
+  const teacherId = text(formData.get("teacher_id"));
+  if (!teacherId) go(`/classes/${classId}`, undefined, "Vui lòng chọn giáo viên.");
+
+  if (role === "Main teacher" || role === "Assistant") {
+    const { error: removeError } = await supabase
+      .from("class_teachers")
+      .delete()
+      .eq("class_id", classId)
+      .eq("role", role);
+    if (removeError) go(`/classes/${classId}`, undefined, removeError.message);
+  }
+
   const { error } = await supabase.from("class_teachers").insert({
     class_id: classId,
-    teacher_id: text(formData.get("teacher_id")),
-    role: text(formData.get("role")) || "Main teacher",
+    teacher_id: teacherId,
+    role,
     payroll_factor: toNumber(formData.get("payroll_factor"), 1)
   });
   if (error) go(`/classes/${classId}`, undefined, error.message);
@@ -290,19 +349,33 @@ export async function updateSessionSchedule(formData: FormData) {
   if (changeError) go("/schedule", undefined, changeError.message);
 
   const teacherId = text(formData.get("teacher_id"));
+  const assistantTeacherId = text(formData.get("assistant_teacher_id"));
+  if (assistantTeacherId && teacherId && assistantTeacherId === teacherId) {
+    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+  }
+
   const { error: removeTeacherError } = await supabase
     .from("session_teachers")
     .delete()
     .eq("session_id", sessionId)
-    .eq("role", "Main teacher");
+    .in("role", ["Main teacher", "Assistant"]);
   if (removeTeacherError) go("/schedule", undefined, removeTeacherError.message);
-  if (teacherId) {
-    const { error: addTeacherError } = await supabase.from("session_teachers").insert({
-      session_id: sessionId,
-      teacher_id: teacherId,
-      role: "Main teacher",
-      payroll_factor: 1
-    });
+
+  const staffingRows: Array<Record<string, unknown>> = [];
+  if (teacherId) staffingRows.push({
+    session_id: sessionId,
+    teacher_id: teacherId,
+    role: "Main teacher",
+    payroll_factor: 1
+  });
+  if (assistantTeacherId) staffingRows.push({
+    session_id: sessionId,
+    teacher_id: assistantTeacherId,
+    role: "Assistant",
+    payroll_factor: 1
+  });
+  if (staffingRows.length) {
+    const { error: addTeacherError } = await supabase.from("session_teachers").insert(staffingRows);
     if (addTeacherError) go("/schedule", undefined, addTeacherError.message);
   }
 
@@ -358,9 +431,12 @@ export async function createSession(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
   const classId = text(formData.get("class_id"));
+  const sessionNo = toNumber(formData.get("session_no"));
+  if (!sessionNo || sessionNo < 1) go("/schedule", undefined, "Số buổi phải từ 1 trở lên.");
+
   const { data: session, error } = await supabase.from("sessions").insert({
     class_id: classId,
-    session_no: toNumber(formData.get("session_no")),
+    session_no: sessionNo,
     scheduled_date: text(formData.get("scheduled_date")),
     start_time: text(formData.get("start_time")),
     end_time: text(formData.get("end_time")),
@@ -374,14 +450,38 @@ export async function createSession(formData: FormData) {
     created_by: profile.id
   }).select("id").single();
   if (error || !session) go("/schedule", undefined, error?.message || "Không tạo được session.");
-  const teacherId = text(formData.get("teacher_id"));
-  if (teacherId) {
-    const { error: teacherError } = await supabase.from("session_teachers").insert({ session_id: session.id, teacher_id: teacherId, role: "Main teacher", payroll_factor: 1 });
+
+  let teacherId = text(formData.get("teacher_id"));
+  let assistantTeacherId = text(formData.get("assistant_teacher_id"));
+
+  if (!teacherId || !assistantTeacherId) {
+    const { data: classStaff } = await supabase
+      .from("class_teachers")
+      .select("teacher_id,role,payroll_factor")
+      .eq("class_id", classId)
+      .in("role", ["Main teacher", "Assistant"]);
+    if (!teacherId) teacherId = classStaff?.find((x:any)=>x.role === "Main teacher")?.teacher_id || "";
+    if (!assistantTeacherId) assistantTeacherId = classStaff?.find((x:any)=>x.role === "Assistant")?.teacher_id || "";
+  }
+
+  if (assistantTeacherId && teacherId && assistantTeacherId === teacherId) {
+    await supabase.from("sessions").delete().eq("id", session.id);
+    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+  }
+
+  const staffingRows: Array<Record<string, unknown>> = [];
+  if (teacherId) staffingRows.push({ session_id: session.id, teacher_id: teacherId, role: "Main teacher", payroll_factor: 1 });
+  if (assistantTeacherId) staffingRows.push({ session_id: session.id, teacher_id: assistantTeacherId, role: "Assistant", payroll_factor: 1 });
+
+  if (staffingRows.length) {
+    const { error: teacherError } = await supabase.from("session_teachers").insert(staffingRows);
     if (teacherError) go("/schedule", undefined, teacherError.message);
   }
+
   revalidatePath("/schedule");
   revalidatePath(`/classes/${classId}`);
-  go("/schedule", "Đã tạo session.");
+  revalidatePath("/dashboard");
+  go("/schedule", assistantTeacherId ? "Đã tạo buổi học với GV chính và Trợ giảng." : "Đã tạo buổi học.");
 }
 
 export async function completeSession(formData: FormData) {
