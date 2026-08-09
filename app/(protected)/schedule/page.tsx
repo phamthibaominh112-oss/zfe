@@ -18,6 +18,44 @@ function joined(value: unknown): Record<string, any> | null {
   return value && typeof value === "object" ? value as Record<string, any> : null;
 }
 
+function overlapsPeriod(slot: any, start: string, end: string) {
+  const from = String(slot.effective_from || "");
+  const to = String(slot.effective_to || "");
+  return (!from || from <= end) && (!to || to >= start);
+}
+
+function intersectTimeSets(left: Array<{start:string;end:string}>, right: Array<{start:string;end:string}>) {
+  const result: Array<{start:string;end:string}> = [];
+  for (const a of left) for (const b of right) {
+    const start = a.start > b.start ? a.start : b.start;
+    const end = a.end < b.end ? a.end : b.end;
+    if (start < end && !result.some((x)=>x.start === start && x.end === end)) result.push({ start, end });
+  }
+  return result;
+}
+
+function commonStudentAvailability(studentIds: string[], slots: any[], weekStart: string, weekEnd: string) {
+  if (!studentIds.length) return [] as Array<{weekday:number;start:string;end:string}>;
+  const valid = slots.filter((slot:any)=>studentIds.includes(slot.student_id) && overlapsPeriod(slot, weekStart, weekEnd));
+  const rows: Array<{weekday:number;start:string;end:string}> = [];
+  for (let weekday = 1; weekday <= 7; weekday++) {
+    const byStudent = studentIds.map((studentId)=>valid.filter((slot:any)=>slot.student_id === studentId && slot.weekday === weekday));
+    if (byStudent.some((group)=>group.length === 0)) continue;
+    let common = byStudent[0].map((slot:any)=>({start:String(slot.start_time),end:String(slot.end_time)}));
+    for (let index = 1; index < byStudent.length; index++) {
+      common = intersectTimeSets(common, byStudent[index].map((slot:any)=>({start:String(slot.start_time),end:String(slot.end_time)})));
+      if (!common.length) break;
+    }
+    for (const interval of common) rows.push({weekday,start:interval.start,end:interval.end});
+  }
+  return rows;
+}
+
+function modeMatches(classMode: string | null | undefined, teacherMode: string | null | undefined) {
+  if (!teacherMode || teacherMode === "Hybrid" || !classMode || classMode === "Hybrid") return true;
+  return classMode === teacherMode;
+}
+
 export default async function SchedulePage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
   const profile = await requireRole(["admin","academic_manager","teacher","student"]);
   const params = await searchParams;
@@ -30,18 +68,21 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const supabase = await createClient();
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
-  const [sessions, availability, studentAvailability, teachers, classes, students] = await Promise.all([
+  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("teachers").select("id,code,full_name").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
-    canManage ? supabase.from("classes").select("id,code,name,mode,status").in("status",["Ready","Active"]).is("archived_at",null).order("code") : Promise.resolve({data:[] as any[]}),
-    canManage ? supabase.from("students").select("id,code,full_name,status").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]})
+    canManage ? supabase.from("classes").select("id,code,name,mode,status,capacity,programs(name),levels(name)").in("status",["Draft","Waiting","Ready","Active","Paused"]).is("archived_at",null).order("code") : Promise.resolve({data:[] as any[]}),
+    canManage ? supabase.from("students").select("id,code,full_name,status").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
+    canManage ? supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name)").eq("status","Active").is("archived_at",null) : Promise.resolve({data:[] as any[]})
   ]);
 
-  const selectedStudentId = canManage ? String(params.student || "") : "";
+  const selectedClassId = canManage ? String(params.class || "") : "";
   const selectedTeacherId = canManage ? String(params.teacher || "") : "";
   const teacherRows = teachers.data || [];
+  const classRows = classes.data || [];
+  const selectedClass = selectedClassId ? classRows.find((item:any)=>item.id === selectedClassId) : null;
   const selectedTeacher = selectedTeacherId && selectedTeacherId !== UNASSIGNED_TEACHER
     ? teacherRows.find((teacher:any) => teacher.id === selectedTeacherId)
     : null;
@@ -51,26 +92,39 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? `${selectedTeacher.code} · ${selectedTeacher.full_name}`
       : "Tất cả giáo viên";
 
-  function scheduleHref(nextWeek: number, options?: { keepStudent?: boolean; clearTeacher?: boolean }) {
+  function scheduleHref(nextWeek: number, options?: { clearTeacher?: boolean; clearClass?: boolean }) {
     const query = new URLSearchParams();
     if (nextWeek !== 0) query.set("week", String(nextWeek));
     if (selectedTeacherId && !options?.clearTeacher) query.set("teacher", selectedTeacherId);
-    if (selectedStudentId && options?.keepStudent) query.set("student", selectedStudentId);
+    if (selectedClassId && !options?.clearClass) query.set("class", selectedClassId);
     const suffix = query.toString();
     return `/schedule${suffix ? `?${suffix}` : ""}`;
   }
 
-  const selectedStudentSlots = (studentAvailability.data || []).filter((slot:any) => slot.student_id === selectedStudentId);
-  const matchingRows = selectedStudentSlots.flatMap((studentSlot:any) => (availability.data || [])
-    .filter((teacherSlot:any) => teacherSlot.weekday === studentSlot.weekday && teacherSlot.start_time < studentSlot.end_time && teacherSlot.end_time > studentSlot.start_time)
-    .map((teacherSlot:any) => ({ studentSlot, teacherSlot })));
+  const selectedClassEnrollments = selectedClassId
+    ? (enrollments.data || []).filter((row:any)=>row.class_id === selectedClassId)
+    : [];
+  const selectedClassStudentIds = selectedClassEnrollments.map((row:any)=>row.student_id);
+  const commonClassSlots = selectedClassId
+    ? commonStudentAvailability(selectedClassStudentIds, studentAvailability.data || [], start, end)
+    : [];
+  const activeTeacherSlots = (availability.data || []).filter((slot:any)=>overlapsPeriod(slot,start,end));
+  const classMatchingRows = commonClassSlots.flatMap((classSlot:any)=>activeTeacherSlots
+    .filter((teacherSlot:any)=>teacherSlot.weekday === classSlot.weekday && teacherSlot.start_time < classSlot.end && teacherSlot.end_time > classSlot.start && modeMatches(selectedClass?.mode, teacherSlot.mode))
+    .map((teacherSlot:any)=>({
+      classSlot,
+      teacherSlot,
+      overlapStart: teacherSlot.start_time > classSlot.start ? teacherSlot.start_time : classSlot.start,
+      overlapEnd: teacherSlot.end_time < classSlot.end ? teacherSlot.end_time : classSlot.end
+    })));
 
   const allSessions = sessions.data || [];
+  const classFilteredSessions = selectedClassId ? allSessions.filter((item:any)=>item.class_id === selectedClassId) : allSessions;
   const visibleSessions = selectedTeacherId === UNASSIGNED_TEACHER
-    ? allSessions.filter((item:any) => !(item.session_teachers || []).some((link:any) => joined(link.teachers)?.id))
+    ? classFilteredSessions.filter((item:any) => !(item.session_teachers || []).some((link:any) => joined(link.teachers)?.id))
     : selectedTeacherId
-      ? allSessions.filter((item:any) => (item.session_teachers || []).some((link:any) => joined(link.teachers)?.id === selectedTeacherId))
-      : allSessions;
+      ? classFilteredSessions.filter((item:any) => (item.session_teachers || []).some((link:any) => joined(link.teachers)?.id === selectedTeacherId))
+      : classFilteredSessions;
   const totalHours = visibleSessions.reduce((sum: number, item: any) => sum + Number(item.duration_hours || 0), 0);
   const onlineCount = visibleSessions.filter((item: any) => item.mode === "Online").length;
   const offlineCount = visibleSessions.filter((item: any) => item.mode === "Offline").length;
@@ -81,7 +135,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     ? "Theo dõi lịch học theo tuần và mở link lớp online khi được cập nhật."
     : profile.role === "teacher"
       ? "Xem lịch dạy theo tuần và cập nhật lịch rảnh khi có thay đổi."
-      : "Điều phối session theo tuần, kiểm tra tải lịch và mở công cụ xếp lịch khi cần.";
+      : "Xếp session theo LỚP, sau đó gán GV/TA. Học viên nhận lịch thông qua enrollment vào lớp.";
 
   const actions = <div className="page-actions">
     {profile.role !== "student" ? <FormDetails title={profile.role === "teacher" ? "Cập nhật lịch rảnh" : "Thêm lịch rảnh GV"}><form action={createTeacherAvailability}><FormGrid>
@@ -94,7 +148,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <div className="form-actions"><button className="button button-primary">Lưu lịch rảnh</button></div>
     </FormGrid></form></FormDetails> : null}
     {canManage ? <FormDetails title="Tạo buổi học"><form action={createSession}><FormGrid>
-      <SelectField label="Lớp" name="class_id" required options={(classes.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.name}`}))}/>
+      <SelectField label="Lớp" name="class_id" required defaultValue={selectedClassId} options={(classes.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.name}`}))}/>
       <Field label="Số buổi học thực tế" name="session_no" type="number" required/><Field label="Ngày" name="scheduled_date" type="date" required/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/><Field label="Số giờ" name="duration_hours" type="number" step="0.25" required/>
       <SelectField label="Hình thức" name="mode" required options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><SelectField label="Giáo viên chính" name="teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
@@ -106,6 +160,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
+    {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
+      <div className="teacher-filter-copy">
+        <span>Xếp lịch theo lớp</span>
+        <strong>{selectedClass ? `${selectedClass.code} · ${selectedClass.name}` : "Tất cả lớp"}</strong>
+        <small>ZE / ZB / ZK… là mã lớp. Chọn lớp trước rồi mới xếp GV và session.</small>
+      </div>
+      <form method="get" className="teacher-filter-form">
+        {safeOffset !== 0 ? <input type="hidden" name="week" value={safeOffset}/> : null}
+        {selectedTeacherId ? <input type="hidden" name="teacher" value={selectedTeacherId}/> : null}
+        <label className="form-group teacher-filter-select"><span>Lớp</span><select className="select" name="class" defaultValue={selectedClassId}>
+          <option value="">Tất cả lớp</option>
+          {classRows.map((item:any)=><option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+        </select></label>
+        <button className="button button-primary">Xem lịch lớp</button>
+        {selectedClassId ? <a className="button button-ghost" href={scheduleHref(safeOffset,{clearClass:true})}>Bỏ lọc lớp</a> : null}
+      </form>
+    </section> : null}
     {canManage ? <section className="teacher-schedule-filter">
       <div className="teacher-filter-copy">
         <span>Xem lịch theo giáo viên</span>
@@ -114,6 +185,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       </div>
       <form method="get" className="teacher-filter-form">
         {safeOffset !== 0 ? <input type="hidden" name="week" value={safeOffset}/> : null}
+        {selectedClassId ? <input type="hidden" name="class" value={selectedClassId}/> : null}
         <label className="form-group teacher-filter-select"><span>Giáo viên</span><select className="select" name="teacher" defaultValue={selectedTeacherId}>
           <option value="">Tất cả giáo viên</option>
           <option value={UNASSIGNED_TEACHER}>Chưa phân giáo viên</option>
@@ -193,14 +265,14 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     </section>
 
     {canManage ? <details className="tool-drawer section-gap">
-      <summary><div><strong>Công cụ xếp lịch</strong><span>Match lịch rảnh học viên với giáo viên và kiểm tra dữ liệu availability</span></div><b>+</b></summary>
+      <summary><div><strong>Công cụ xếp lịch theo lớp</strong><span>Match lịch chung của roster trong lớp với availability giáo viên</span></div><b>+</b></summary>
       <div className="tool-drawer-body">
-        <Panel title="Tìm khung giờ phù hợp" description="Chọn học viên để xem các slot GV trùng lịch rảnh">
-          <form className="inline-form" method="get"><label className="form-group"><span>Học viên</span><select className="select" name="student" defaultValue={selectedStudentId}><option value="">Chọn học viên...</option>{(students.data || []).map((student:any)=><option value={student.id} key={student.id}>{student.code} · {student.full_name} · {student.status}</option>)}</select></label><input type="hidden" name="week" value={safeOffset}/>{selectedTeacherId ? <input type="hidden" name="teacher" value={selectedTeacherId}/> : null}<button className="button button-primary">Tìm lịch phù hợp</button></form>
-          {selectedStudentId ? <div className="section-gap">{matchingRows.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Ngày</th><th>Lịch rảnh HV</th><th>Giáo viên</th><th>Lịch rảnh GV</th><th>Hình thức / Cơ sở</th></tr></thead><tbody>{matchingRows.map((row:any,index:number)=>{
-            const teacherRow = joined(row.teacherSlot.teachers);
-            return <tr key={`${row.teacherSlot.id}-${row.studentSlot.id}-${index}`}><td>{DAY_LABELS[row.studentSlot.weekday-1]}</td><td>{row.studentSlot.start_time?.slice(0,5)}–{row.studentSlot.end_time?.slice(0,5)}</td><td><strong>{teacherRow?.code} · {teacherRow?.full_name}</strong></td><td>{row.teacherSlot.start_time?.slice(0,5)}–{row.teacherSlot.end_time?.slice(0,5)}</td><td>{row.teacherSlot.mode || "Linh hoạt"} · {row.teacherSlot.campus || "Mọi cơ sở"}</td></tr>;
-          })}</tbody></table></div> : <Empty title="Chưa tìm thấy khung giờ chung" description="Cập nhật lại lịch rảnh của học viên hoặc giáo viên."/>}</div> : <Empty title="Chọn một học viên" description="Hệ thống sẽ so sánh các khung giờ đã đăng ký." />}
+        <Panel title="Tìm GV phù hợp cho lớp" description="Lấy giao của availability tất cả HV trong roster rồi so với availability giáo viên">
+          <form className="inline-form" method="get"><label className="form-group"><span>Lớp cần xếp</span><select className="select" name="class" defaultValue={selectedClassId}><option value="">Chọn lớp...</option>{classRows.map((item:any)=><option value={item.id} key={item.id}>{item.code} · {item.name}</option>)}</select></label><input type="hidden" name="week" value={safeOffset}/>{selectedTeacherId ? <input type="hidden" name="teacher" value={selectedTeacherId}/> : null}<button className="button button-primary">Tìm GV cho lớp</button></form>
+          {selectedClassId ? <div className="section-gap">
+            <div className="class-match-roster"><strong>{selectedClass?.code} · {selectedClassEnrollments.length} học viên</strong><span>{selectedClassEnrollments.map((row:any)=>joined(row.students)?.full_name).filter(Boolean).join(" · ") || "Chưa có học viên trong lớp"}</span></div>
+            {!selectedClassEnrollments.length ? <Empty title="Lớp chưa có học viên" description="Vào Xếp lớp & GV để kéo học viên vào lớp trước khi matching giáo viên."/> : !commonClassSlots.length ? <Empty title="Chưa có khung giờ chung của cả lớp" description="Kiểm tra availability của từng học viên trong roster; lớp 2–3 HV cần ít nhất một khoảng giờ giao nhau."/> : classMatchingRows.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Ngày</th><th>Lịch chung lớp</th><th>Giáo viên</th><th>GV rảnh</th><th>Khung có thể xếp</th></tr></thead><tbody>{classMatchingRows.map((row:any,index:number)=>{ const teacherRow = joined(row.teacherSlot.teachers); return <tr key={`${row.teacherSlot.id}-${row.classSlot.weekday}-${row.classSlot.start}-${index}`}><td>{DAY_LABELS[row.classSlot.weekday-1]}</td><td><strong>{row.classSlot.start.slice(0,5)}–{row.classSlot.end.slice(0,5)}</strong><small className="table-subline">{selectedClassEnrollments.length} HV cùng rảnh</small></td><td><strong>{teacherRow?.code} · {teacherRow?.full_name}</strong></td><td>{row.teacherSlot.start_time?.slice(0,5)}–{row.teacherSlot.end_time?.slice(0,5)} · {row.teacherSlot.mode || "Linh hoạt"}</td><td><strong>{row.overlapStart.slice(0,5)}–{row.overlapEnd.slice(0,5)}</strong></td></tr>; })}</tbody></table></div> : <Empty title="Chưa có GV trùng lịch chung của lớp" description="Giữ roster, thử tuần khác hoặc cập nhật availability GV."/>}
+          </div> : <Empty title="Chọn một lớp" description="Matching giờ chạy theo lớp, không chạy theo từng học viên riêng lẻ."/>}
         </Panel>
         <div className="grid-2 section-gap">
           <Panel title="Lịch rảnh giáo viên" description="Học vụ và Admin có thể điều chỉnh hoặc xóa slot khi cần">
@@ -224,8 +296,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               </div></details>
             </div>; })}</div> : <Empty title="Chưa có lịch rảnh GV" description="Thêm availability để bắt đầu matching."/>}
           </Panel>
-          <Panel title="Lịch rảnh học viên" description="Dữ liệu dùng để xếp lớp">
-            {studentAvailability.data?.length ? <div className="compact-list">{studentAvailability.data.slice(0,12).map((item:any)=>{ const studentRow = joined(item.students); return <div className="compact-row" key={item.id}><div><strong>{studentRow?.full_name || "Học viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><small>{item.note || "Không có ghi chú"}</small></div>; })}</div> : <Empty title="Chưa có lịch rảnh HV" description="CSKH hoặc Học vụ có thể cập nhật trong hồ sơ học viên."/>}
+          <Panel title="Availability học viên" description={selectedClass ? `Roster của ${selectedClass.code}` : "Chọn lớp để kiểm tra lịch rảnh roster"}>
+            {selectedClassId ? (studentAvailability.data || []).filter((item:any)=>selectedClassStudentIds.includes(item.student_id)).length ? <div className="compact-list">{(studentAvailability.data || []).filter((item:any)=>selectedClassStudentIds.includes(item.student_id)).slice(0,20).map((item:any)=>{ const studentRow = joined(item.students); return <div className="compact-row" key={item.id}><div><strong>{studentRow?.full_name || "Học viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><small>{item.note || "Không có ghi chú"}</small></div>; })}</div> : <Empty title="Roster chưa có availability" description="CSKH hoặc Học vụ cập nhật lịch rảnh từng học viên trong lớp."/> : <Empty title="Chưa chọn lớp" description="Chọn lớp ở trên để chỉ xem availability của các HV thuộc lớp đó."/>}
           </Panel>
         </div>
       </div>

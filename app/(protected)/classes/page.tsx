@@ -33,7 +33,7 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
   }
   const canManage = ["admin","academic_manager"].includes(profile.role);
 
-  const actions = canManage ? <FormDetails title="Tạo lớp học"><form action={createClass}><FormGrid>
+  const actions = canManage ? <><Link className="button button-secondary" href="/class-planner">Xếp lớp & GV</Link><FormDetails title="Tạo lớp học"><form action={createClass}><FormGrid>
     <Field label="Mã lớp" name="code" required placeholder="ZE26001" />
     <Field label="Tên lớp" name="name" required />
     <SelectField label="Category" name="category" required options={[
@@ -53,7 +53,7 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
     <Field label="Target" name="target" />
     <TextAreaField label="Ghi chú" name="notes" />
     <div className="form-actions"><button className="button button-primary">Tạo lớp</button></div>
-  </FormGrid></form></FormDetails> : undefined;
+  </FormGrid></form></FormDetails></> : undefined;
 
   return <>
     <PageHeader eyebrow="Quản lý lớp học" title="Danh sách lớp học" description={profile.role === "student" ? "Các lớp bạn đang hoặc đã tham gia." : profile.role === "teacher" ? "Các lớp bạn đang phụ trách." : "Theo dõi chương trình, level, giáo viên, sĩ số và tiến độ của từng lớp."} actions={actions}/>
@@ -63,14 +63,15 @@ export default async function ClassesPage({ searchParams }: { searchParams: Prom
         const progress = progressByClass.get(item.id);
         const classTeachers = teachersByClass.get(item.id) || [];
         const classStudents = studentsByClass.get(item.id) || [];
-        const teacherNames = classTeachers.map((link:any) => link.teachers?.full_name).filter(Boolean);
+        const mainTeacher = classTeachers.find((link:any)=>link.role === "Main teacher")?.teachers?.full_name;
+        const assistantTeacher = classTeachers.find((link:any)=>link.role === "Assistant")?.teachers?.full_name;
         const studentNames = classStudents.map((link:any) => link.students?.full_name).filter(Boolean);
         return <article className="class-card" key={item.id}>
           <div className="card-top"><div><h3>{item.code}</h3><p>{item.name}</p></div><Status value={item.status}/></div>
           <div className="card-meta"><span className="chip chip-blue">{item.category}</span><span className="chip chip-yellow">{item.mode}</span><span className="chip">{item.programs?.name || "No program"}</span><span className="chip">{item.levels?.name || "No level"}</span></div>
           <div className="profile-grid section-gap" style={{gridTemplateColumns:"repeat(2,minmax(0,1fr))"}}><div className="profile-item"><span>Progress</span><strong>{progress?.progress_percent || 0}%</strong></div><div className="profile-item"><span>Sessions</span><strong>{progress?.completed_sessions || 0}/{item.total_sessions}</strong></div><div className="profile-item"><span>Start</span><strong>{formatDate(item.start_date)}</strong></div><div className="profile-item"><span>Target</span><strong>{item.target || "—"}</strong></div></div>
           <div className="detail-list section-gap">
-            <div className="detail-row"><span>Giáo viên</span><strong>{teacherNames.join(", ") || "Chưa phân công"}</strong></div>
+            <div className="detail-row"><span>Đội ngũ</span><strong>{mainTeacher ? `GV: ${mainTeacher}${assistantTeacher ? ` · TA: ${assistantTeacher}` : ""}` : "Chưa phân công GV"}</strong></div>
             <div className="detail-row"><span>Học viên</span><strong>{studentNames.length ? `${studentNames.slice(0,3).join(", ")}${studentNames.length > 3 ? ` +${studentNames.length-3}` : ""}` : "Chưa enroll"}</strong></div>
           </div>
           <div className="card-footer"><span>{item.campus || "Chưa có cơ sở"} · Tối đa {item.capacity} HV</span><div className="row-actions"><Link className="button button-secondary" href={`/classes/${item.id}`}>Mở lớp</Link>{profile.role === "admin" ? <form action={archiveClass}><input type="hidden" name="class_id" value={item.id}/><button className="button button-danger">Lưu trữ</button></form> : null}</div></div>

@@ -155,12 +155,13 @@ export async function setClassTeachingTeam(formData: FormData) {
   await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
   const classId = text(formData.get("class_id"));
+  const returnTo = text(formData.get("return_to")) || `/classes/${classId}`;
   const mainTeacherId = text(formData.get("main_teacher_id"));
   const assistantTeacherId = text(formData.get("assistant_teacher_id"));
 
-  if (!mainTeacherId) go(`/classes/${classId}`, undefined, "Vui lòng chọn Giáo viên chính.");
+  if (!mainTeacherId) go(returnTo, undefined, "Vui lòng chọn Giáo viên chính.");
   if (assistantTeacherId && assistantTeacherId === mainTeacherId) {
-    go(`/classes/${classId}`, undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+    go(returnTo, undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
   }
 
   const { error: removeError } = await supabase
@@ -168,7 +169,7 @@ export async function setClassTeachingTeam(formData: FormData) {
     .delete()
     .eq("class_id", classId)
     .in("role", ["Main teacher", "Assistant"]);
-  if (removeError) go(`/classes/${classId}`, undefined, removeError.message);
+  if (removeError) go(returnTo, undefined, removeError.message);
 
   const rows: Array<Record<string, unknown>> = [{
     class_id: classId,
@@ -185,13 +186,13 @@ export async function setClassTeachingTeam(formData: FormData) {
   });
 
   const { error: insertError } = await supabase.from("class_teachers").insert(rows);
-  if (insertError) go(`/classes/${classId}`, undefined, insertError.message);
+  if (insertError) go(returnTo, undefined, insertError.message);
 
   revalidatePath(`/classes/${classId}`);
   revalidatePath("/classes");
   revalidatePath("/schedule");
   revalidatePath("/dashboard");
-  go(`/classes/${classId}`, assistantTeacherId
+  go(returnTo, assistantTeacherId
     ? "Đã cập nhật Giáo viên chính và Trợ giảng của lớp."
     : "Đã cập nhật Giáo viên chính. Lớp hiện chưa có Trợ giảng.");
 }
@@ -240,6 +241,73 @@ export async function enrollStudent(formData: FormData) {
   if (error) go(`/classes/${classId}`, undefined, error.message);
   revalidatePath(`/classes/${classId}`);
   go(`/classes/${classId}`, "Đã xếp học viên vào lớp.");
+}
+
+export async function moveStudentEnrollment(studentId: string, targetClassId: string | null, sourceClassId: string | null) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+
+  if (!studentId) return { ok: false, error: "Không tìm thấy học viên." };
+  if (targetClassId && sourceClassId === targetClassId) return { ok: true };
+
+  try {
+    if (targetClassId) {
+      const [{ data: targetClass, error: classError }, { count, error: countError }] = await Promise.all([
+        supabase.from("classes").select("id,code,capacity,status").eq("id", targetClassId).is("archived_at", null).single(),
+        supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("class_id", targetClassId).eq("status", "Active").is("archived_at", null).neq("student_id", studentId)
+      ]);
+      if (classError || !targetClass) return { ok: false, error: classError?.message || "Không tìm thấy lớp đích." };
+      if (countError) return { ok: false, error: countError.message };
+      if (Number(count || 0) >= Number(targetClass.capacity || 1)) return { ok: false, error: `${targetClass.code} đã đủ sĩ số.` };
+
+      const { data: existing, error: existingError } = await supabase
+        .from("enrollments")
+        .select("id,archived_at,status")
+        .eq("student_id", studentId)
+        .eq("class_id", targetClassId)
+        .maybeSingle();
+      if (existingError) return { ok: false, error: existingError.message };
+
+      if (existing) {
+        const { error } = await supabase.from("enrollments").update({
+          archived_at: null,
+          archived_by: null,
+          status: "Active",
+          end_date: null,
+          start_date: new Date().toISOString().slice(0, 10),
+          enrolled_by: profile.id
+        }).eq("id", existing.id);
+        if (error) return { ok: false, error: error.message };
+      } else {
+        const { error } = await supabase.from("enrollments").insert({
+          student_id: studentId,
+          class_id: targetClassId,
+          start_date: new Date().toISOString().slice(0, 10),
+          status: "Active",
+          enrolled_by: profile.id
+        });
+        if (error) return { ok: false, error: error.message };
+      }
+    }
+
+    if (sourceClassId && sourceClassId !== targetClassId) {
+      const { error } = await supabase.from("enrollments").update({
+        status: "Transferred",
+        end_date: new Date().toISOString().slice(0, 10),
+        archived_at: new Date().toISOString(),
+        archived_by: profile.id
+      }).eq("student_id", studentId).eq("class_id", sourceClassId).is("archived_at", null);
+      if (error) return { ok: false, error: error.message };
+    }
+
+    revalidatePath("/class-planner");
+    revalidatePath("/classes");
+    revalidatePath("/schedule");
+    revalidatePath("/students");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: failMessage(error) };
+  }
 }
 
 export async function createTeacherAvailability(formData: FormData) {

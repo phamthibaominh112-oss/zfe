@@ -39,6 +39,7 @@ export type NavItem = {
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan", short: "⌂" },
+  { href: "/class-planner", label: "Xếp lớp & GV", short: "XL" },
   { href: "/schedule", label: "Lịch trung tâm", short: "◷" },
   { href: "/workforce", label: "Chấm công & nhân sự", short: "CC" },
   { href: "/classes", label: "Lớp học", short: "▦" },
@@ -55,6 +56,7 @@ const ADMIN_NAV: NavItem[] = [
 
 const ACADEMIC_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan", short: "⌂" },
+  { href: "/class-planner", label: "Xếp lớp & GV", short: "XL" },
   { href: "/schedule", label: "Lịch trung tâm", short: "◷" },
   { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/classes", label: "Lớp học", short: "▦" },
