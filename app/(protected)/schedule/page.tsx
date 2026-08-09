@@ -160,7 +160,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
-    {canManage ? <div className="session-team-capability-banner"><strong>v1.3.9 · CO-TEACHER ENABLED</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
+    {canManage ? <div className="session-team-capability-banner"><strong>v1.3.10 · CO-TEACHER ENABLED · BUILD FIX</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
     {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
       <div className="teacher-filter-copy">
         <span>Xếp lịch theo lớp</span>

@@ -4,7 +4,7 @@ import { PageHeader, MetricCard, Panel, Status, Flash, Empty } from "@/component
 import { Field } from "@/components/forms";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/vietnam-date";
 import type { CSSProperties, ReactNode } from "react";
 

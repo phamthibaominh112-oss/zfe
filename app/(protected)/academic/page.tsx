@@ -3,7 +3,7 @@ import { completeSession, createAssignment, createAssessment, gradeAssignmentSub
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, sessionDisplayLabel } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AcademicPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
