@@ -968,3 +968,22 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 @media(max-width:720px){
   .session-team-heading{align-items:flex-start;flex-direction:column}
 }
+
+
+/* v1.3.7 hard-fix marker + teaching-team capability */
+.session-team-capability-banner{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:0 0 14px;
+  padding:10px 14px;
+  border:1px solid #cbd7ff;
+  border-radius:12px;
+  background:#f4f7ff;
+  color:#344054;
+  font-size:12px;
+}
+.session-team-capability-banner strong{color:#173bcb}
+@media(max-width:640px){
+  .session-team-capability-banner{align-items:flex-start;flex-direction:column;gap:2px}
+}

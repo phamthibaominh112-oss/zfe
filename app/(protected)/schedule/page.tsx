@@ -160,6 +160,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
+    {canManage ? <div className="session-team-capability-banner"><strong>Đội ngũ buổi học</strong><span>Mỗi session hỗ trợ đồng thời 1 GV chính + 1 Trợ giảng (TA).</span></div> : null}
     {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
       <div className="teacher-filter-copy">
         <span>Xếp lịch theo lớp</span>
