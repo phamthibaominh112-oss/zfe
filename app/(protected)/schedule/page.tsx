@@ -1,4 +1,4 @@
-import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, updateSessionSchedule, updateTeacherAvailability } from "@/app/actions";
+import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
@@ -229,6 +229,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 <h3>{classRow?.code || "Lớp"} · {sessionDisplayLabel(item.status,item.session_no)}</h3>
                 <p>{classRow?.name || item.topic || "Buổi học"}</p>
                 <div className="session-staff-lines"><small>{teacherText}</small><small className={assistantTeacher ? "session-ta assigned" : "session-ta empty"}>TA: {assistantTeacher?.full_name || "Chưa phân TA"}</small></div>
+                {canManage ? <details className="session-team-quick">
+                  <summary>👥 Phân công GV/TA</summary>
+                  <form action={updateSessionTeachingTeam} className="session-team-quick-form">
+                    <input type="hidden" name="session_id" value={item.id}/>
+                    <SelectField label="Giáo viên chính" name="teacher_id" required defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                    <SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                    <button className="button button-primary session-team-save">Lưu GV + TA</button>
+                    <small className="session-team-help">Không tạo buổi mới cho TA. TA được gắn vào chính session này.</small>
+                  </form>
+                </details> : null}
                 <div className="session-footer"><span className={`mode-dot ${item.mode === "Offline" ? "offline" : ""}`}>{item.mode}</span><Status value={item.status}/></div>
                 {profile.role === "student" && item.meeting_url ? <a className="session-link" href={item.meeting_url} target="_blank" rel="noreferrer">Vào lớp online →</a> : null}
                 {canManage ? <details className="session-manage-details">

@@ -987,3 +987,48 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 @media(max-width:640px){
   .session-team-capability-banner{align-items:flex-start;flex-direction:column;gap:2px}
 }
+
+
+/* v1.3.8 — dedicated same-session GV/TA assignment */
+.session-team-quick{
+  margin-top:8px;
+  border:1px solid #cbd7ff;
+  border-radius:11px;
+  background:#f7f9ff;
+  overflow:hidden;
+}
+.session-team-quick > summary{
+  cursor:pointer;
+  list-style:none;
+  padding:8px 10px;
+  color:#173bcb;
+  font-size:11px;
+  font-weight:900;
+}
+.session-team-quick > summary::-webkit-details-marker{display:none}
+.session-team-quick[open] > summary{
+  border-bottom:1px solid #dfe6ff;
+}
+.session-team-quick-form{
+  display:grid;
+  gap:9px;
+  padding:10px;
+}
+.session-team-quick-form .form-group{
+  gap:4px;
+}
+.session-team-quick-form .form-group > span{
+  font-size:10px;
+}
+.session-team-quick-form select{
+  min-width:0;
+  width:100%;
+}
+.session-team-save{
+  width:100%;
+  min-height:36px;
+}
+.session-team-help{
+  color:#667085;
+  line-height:1.35;
+}

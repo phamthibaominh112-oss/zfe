@@ -370,6 +370,62 @@ export async function deleteTeacherAvailability(formData: FormData) {
   go("/schedule", "Đã xóa lịch rảnh giáo viên.");
 }
 
+export async function updateSessionTeachingTeam(formData: FormData) {
+  await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const sessionId = text(formData.get("session_id"));
+  const teacherId = text(formData.get("teacher_id"));
+  const assistantTeacherId = text(formData.get("assistant_teacher_id"));
+
+  if (!sessionId) go("/schedule", undefined, "Không xác định được buổi học.");
+  if (!teacherId) go("/schedule", undefined, "Vui lòng chọn Giáo viên chính.");
+  if (assistantTeacherId && assistantTeacherId === teacherId) {
+    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+  }
+
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("id,class_id,session_no")
+    .eq("id", sessionId)
+    .is("archived_at", null)
+    .single();
+  if (sessionError || !session) {
+    go("/schedule", undefined, sessionError?.message || "Không tìm thấy buổi học.");
+  }
+
+  // IMPORTANT: this action never inserts/duplicates a session.
+  // It only replaces the teaching-team rows attached to the existing session.
+  const { error: deleteError } = await supabase
+    .from("session_teachers")
+    .delete()
+    .eq("session_id", sessionId)
+    .in("role", ["Main teacher", "Assistant"]);
+  if (deleteError) go("/schedule", undefined, deleteError.message);
+
+  const rows: Array<Record<string, unknown>> = [{
+    session_id: sessionId,
+    teacher_id: teacherId,
+    role: "Main teacher",
+    payroll_factor: 1
+  }];
+  if (assistantTeacherId) rows.push({
+    session_id: sessionId,
+    teacher_id: assistantTeacherId,
+    role: "Assistant",
+    payroll_factor: 1
+  });
+
+  const { error: insertError } = await supabase.from("session_teachers").insert(rows);
+  if (insertError) go("/schedule", undefined, insertError.message);
+
+  revalidatePath("/schedule");
+  revalidatePath(`/classes/${session.class_id}`);
+  revalidatePath("/dashboard");
+  go("/schedule", assistantTeacherId
+    ? `Đã phân công GV chính + TA cho Buổi ${session.session_no}.`
+    : `Đã cập nhật GV chính cho Buổi ${session.session_no}.`);
+}
+
 export async function updateSessionSchedule(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
@@ -501,6 +557,23 @@ export async function createSession(formData: FormData) {
   const classId = text(formData.get("class_id"));
   const sessionNo = toNumber(formData.get("session_no"));
   if (!sessionNo || sessionNo < 1) go("/schedule", undefined, "Số buổi phải từ 1 trở lên.");
+
+  const { data: existingSession } = await supabase
+    .from("sessions")
+    .select("id,session_no,status")
+    .eq("class_id", classId)
+    .eq("session_no", sessionNo)
+    .neq("status", "Cancelled")
+    .is("archived_at", null)
+    .maybeSingle();
+
+  if (existingSession) {
+    go(
+      "/schedule",
+      undefined,
+      `Buổi ${sessionNo} đã tồn tại trong lớp này. Nếu bạn đang thêm Trợ giảng (TA), không tạo buổi mới — hãy dùng "Phân công GV/TA" ngay trên card của Buổi ${sessionNo}.`
+    );
+  }
 
   const { data: session, error } = await supabase.from("sessions").insert({
     class_id: classId,
