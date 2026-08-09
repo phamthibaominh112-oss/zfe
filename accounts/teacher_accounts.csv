@@ -1,8 +1,0 @@
-﻿entity_type,entity_code,full_name,email,temporary_password,role,action,notes
-teacher,TCH-DUNG,Mr. Dũng,dung@mail.com,dung123,teacher,create,Temporary account; change password after first login
-teacher,TCH-KHANG,Mr. Khang,khang@mail.com,khang123,teacher,create,Temporary account; change password after first login
-teacher,TCH-MINH,Mr. Minh,minh@mail.com,minh123,teacher,create,Temporary account; change password after first login
-teacher,TCH-NAM,Mr. Nam,nam@mail.com,nam123,teacher,create,Temporary account; change password after first login
-teacher,TCH-PHONG,Mr. Phong,giaovien@gmail.com,,teacher,link_or_skip_existing,Existing email retained
-teacher,TCH-THINH,Mr. Thịnh,thinh@mail.com,thinh123,teacher,create,Temporary account; change password after first login
-teacher,TCH-NHUNG,Ms. Nhung,nhung@mail.com,nhung123,teacher,create,Temporary account; change password after first login

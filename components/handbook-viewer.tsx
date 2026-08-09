@@ -59,6 +59,42 @@ const EMBEDDED_HANDBOOK_CSS = `
   main { width:100% !important; min-width:0 !important; }
   .hero { margin-top:0 !important; }
   .section { scroll-margin-top:76px !important; }
+
+  /* Timeline labels such as T-24, T-12, 0–180', +2h, +6h must never be squeezed. */
+  .timeline { min-width:0 !important; }
+  .step {
+    display:grid !important;
+    grid-template-columns:max-content minmax(0,1fr) !important;
+    gap:12px !important;
+    align-items:start !important;
+    min-width:0 !important;
+  }
+  .step-no {
+    width:auto !important;
+    min-width:48px !important;
+    max-width:96px !important;
+    height:auto !important;
+    min-height:36px !important;
+    padding:8px 10px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    text-align:center !important;
+    font-size:11px !important;
+    line-height:1.05 !important;
+  }
+  .step-box {
+    min-width:0 !important;
+    width:auto !important;
+    overflow-wrap:anywhere !important;
+  }
+  @media (max-width:560px) {
+    .step { grid-template-columns:1fr !important; gap:8px !important; }
+    .step-no { justify-self:start !important; max-width:none !important; }
+  }
+
   .footer { margin-bottom:20px !important; }
 }
 `;

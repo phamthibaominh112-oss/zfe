@@ -161,7 +161,7 @@ export async function setClassTeachingTeam(formData: FormData) {
 
   if (!mainTeacherId) go(returnTo, undefined, "Vui lòng chọn Giáo viên chính.");
   if (assistantTeacherId && assistantTeacherId === mainTeacherId) {
-    go(returnTo, undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+    go(returnTo, undefined, "GV chính và Co-teacher/TA phải là hai người khác nhau.");
   }
 
   const { error: removeError } = await supabase
@@ -380,7 +380,7 @@ export async function updateSessionTeachingTeam(formData: FormData) {
   if (!sessionId) go("/schedule", undefined, "Không xác định được buổi học.");
   if (!teacherId) go("/schedule", undefined, "Vui lòng chọn Giáo viên chính.");
   if (assistantTeacherId && assistantTeacherId === teacherId) {
-    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+    go("/schedule", undefined, "GV chính và Co-teacher/TA phải là hai người khác nhau.");
   }
 
   const { data: session, error: sessionError } = await supabase
@@ -475,7 +475,7 @@ export async function updateSessionSchedule(formData: FormData) {
   const teacherId = text(formData.get("teacher_id"));
   const assistantTeacherId = text(formData.get("assistant_teacher_id"));
   if (assistantTeacherId && teacherId && assistantTeacherId === teacherId) {
-    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+    go("/schedule", undefined, "GV chính và Co-teacher/TA phải là hai người khác nhau.");
   }
 
   const { error: removeTeacherError } = await supabase
@@ -571,7 +571,7 @@ export async function createSession(formData: FormData) {
     go(
       "/schedule",
       undefined,
-      `Buổi ${sessionNo} đã tồn tại trong lớp này. Nếu bạn đang thêm Trợ giảng (TA), không tạo buổi mới — hãy dùng "Phân công GV/TA" ngay trên card của Buổi ${sessionNo}.`
+      `Buổi ${sessionNo} đã tồn tại trong lớp này. Nếu bạn đang thêm Co-teacher/TA, KHÔNG tạo buổi mới. Hãy mở "Quản lý GV + Co-teacher/TA" ngay trên card của Buổi ${sessionNo}.`
     );
   }
 
@@ -607,7 +607,7 @@ export async function createSession(formData: FormData) {
 
   if (assistantTeacherId && teacherId && assistantTeacherId === teacherId) {
     await supabase.from("sessions").delete().eq("id", session.id);
-    go("/schedule", undefined, "Giáo viên chính và Trợ giảng phải là hai người khác nhau.");
+    go("/schedule", undefined, "GV chính và Co-teacher/TA phải là hai người khác nhau.");
   }
 
   const staffingRows: Array<Record<string, unknown>> = [];

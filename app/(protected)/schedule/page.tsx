@@ -151,7 +151,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <SelectField label="Lớp" name="class_id" required defaultValue={selectedClassId} options={(classes.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.name}`}))}/>
       <Field label="Số buổi học thực tế" name="session_no" type="number" required/><Field label="Ngày" name="scheduled_date" type="date" required/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/><Field label="Số giờ" name="duration_hours" type="number" step="0.25" required/>
-      <SelectField label="Hình thức" name="mode" required options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><div className="session-team-heading"><strong>Đội ngũ buổi học</strong><span>Chọn đồng thời GV chính và TA cho cùng session</span></div><SelectField label="Giáo viên chính (GV)" name="teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+      <SelectField label="Hình thức" name="mode" required options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><div className="session-team-heading"><strong>Đội ngũ buổi học</strong><span>Chọn đồng thời GV chính và TA cho cùng session</span></div><SelectField label="Giáo viên chính (GV)" name="teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Co-teacher / Trợ giảng (TA)" name="assistant_teacher_id" options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
       <Field label="Cơ sở" name="campus"/><Field label="Phòng" name="room"/><Field label="Link lớp" name="meeting_url"/><Field label="Nội dung" name="topic"/>
       <div className="form-actions"><button className="button button-primary">Tạo buổi học</button></div>
     </FormGrid></form></FormDetails> : null}
@@ -160,7 +160,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
-    {canManage ? <div className="session-team-capability-banner"><strong>Đội ngũ buổi học</strong><span>Mỗi session hỗ trợ đồng thời 1 GV chính + 1 Trợ giảng (TA).</span></div> : null}
+    {canManage ? <div className="session-team-capability-banner"><strong>v1.3.9 · CO-TEACHER ENABLED</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
     {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
       <div className="teacher-filter-copy">
         <span>Xếp lịch theo lớp</span>
@@ -230,13 +230,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 <p>{classRow?.name || item.topic || "Buổi học"}</p>
                 <div className="session-staff-lines"><small>{teacherText}</small><small className={assistantTeacher ? "session-ta assigned" : "session-ta empty"}>TA: {assistantTeacher?.full_name || "Chưa phân TA"}</small></div>
                 {canManage ? <details className="session-team-quick">
-                  <summary>👥 Phân công GV/TA</summary>
+                  <summary>👥 Quản lý GV + Co-teacher/TA</summary>
                   <form action={updateSessionTeachingTeam} className="session-team-quick-form">
                     <input type="hidden" name="session_id" value={item.id}/>
                     <SelectField label="Giáo viên chính" name="teacher_id" required defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
-                    <SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
-                    <button className="button button-primary session-team-save">Lưu GV + TA</button>
-                    <small className="session-team-help">Không tạo buổi mới cho TA. TA được gắn vào chính session này.</small>
+                    <SelectField label="Co-teacher / Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                    <button className="button button-primary session-team-save">Lưu đội ngũ buổi học</button>
+                    <small className="session-team-help">Không tạo session thứ hai. Co-teacher/TA được gắn vào chính buổi học này.</small>
                   </form>
                 </details> : null}
                 <div className="session-footer"><span className={`mode-dot ${item.mode === "Offline" ? "offline" : ""}`}>{item.mode}</span><Status value={item.status}/></div>
@@ -251,7 +251,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                       <Field label="Kết thúc" name="end_time" type="time" required defaultValue={item.end_time?.slice(0,5)}/>
                       <Field label="Số giờ" name="duration_hours" type="number" step="0.25" required defaultValue={item.duration_hours}/>
                       <SelectField label="Hình thức" name="mode" required defaultValue={item.mode} options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/>
-                      <div className="session-team-heading"><strong>Đội ngũ buổi học</strong><span>GV chính và TA cùng tham gia session này</span></div><SelectField label="Giáo viên chính (GV)" name="teacher_id" defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
+                      <div className="session-team-heading"><strong>Đội ngũ buổi học</strong><span>GV chính và TA cùng tham gia session này</span></div><SelectField label="Giáo viên chính (GV)" name="teacher_id" defaultValue={mainTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/><SelectField label="Co-teacher / Trợ giảng (TA)" name="assistant_teacher_id" defaultValue={assistantTeacher?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
                       <SelectField label="Trạng thái" name="status" required defaultValue={item.status} options={["Scheduled","Rescheduled","Cancelled","Make-up required","Make-up completed"].map(v=>({value:v,label:v}))}/>
                       <Field label="Cơ sở" name="campus" defaultValue={item.campus || ""}/>
                       <Field label="Phòng" name="room" defaultValue={item.room || ""}/>

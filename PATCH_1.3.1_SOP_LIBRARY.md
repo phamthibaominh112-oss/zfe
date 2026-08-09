@@ -12,5 +12,5 @@
 - Viewer supports fullscreen and Print / Save PDF.
 - Includes End-to-End Learner Journey, Placement Test SOP & SLA, schedule policy, role workflows, KPI/payroll, cases and step-by-step instructions.
 
-## No new SQL migration required
-This release does not require running a new SQL file. The hotfix also carries the already-corrected v1.3.0 migration 009 source file so the repository remains consistent with the fixed SQL previously applied.
+## No SQL migration required
+This release is application/UI content only.
