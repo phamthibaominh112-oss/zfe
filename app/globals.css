@@ -1068,3 +1068,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .placement-card-head{flex-direction:column}
   .workforce-week-nav{align-items:stretch;flex-direction:column}
 }
+
+
+/* v1.4.2 — Placement Speaking urgent booking */
+.placement-urgent-note{
+  margin:0 0 14px;
+  padding:11px 14px;
+  border:1px solid #f0d48a;
+  border-radius:12px;
+  background:#fff9e8;
+  color:#6f5700;
+  font-size:12px;
+  line-height:1.45;
+}
+.placement-urgent-note strong{color:#8a6500}

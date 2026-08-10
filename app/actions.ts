@@ -934,7 +934,9 @@ export async function bookPlacementSpeaking(formData: FormData) {
   const supabase = await createClient();
   const raw = text(formData.get("scheduled_start"));
   const when = new Date(raw.includes("T") ? `${raw}:00+07:00` : raw);
-  if (!Number.isFinite(when.getTime()) || when.getTime() - Date.now() < 12*60*60*1000) go("/placement", undefined, "Speaking phải được book trước ít nhất 12 giờ.");
+  if (!Number.isFinite(when.getTime())) go("/placement", undefined, "Thời gian Speaking không hợp lệ.");
+  // v1.4.2: booking Speaking dưới 12 giờ vẫn được phép.
+  // 12 giờ chỉ còn là khuyến nghị vận hành, không phải hard constraint.
   const teacherId = text(formData.get("teacher_id"));
   const { data: teacher } = await supabase.from("teachers").select("id,is_placement_assessor").eq("id",teacherId).maybeSingle();
   if (!teacher?.is_placement_assessor) go("/placement", undefined, "Chỉ GV được đánh dấu Placement Assessor mới nhận lịch Speaking.");
