@@ -1033,4 +1033,38 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   line-height:1.35;
 }
 
-.workforce-week-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}.placement-list{display:grid;gap:14px}.placement-card{display:grid;gap:12px}.placement-card-head{display:flex;justify-content:space-between;gap:12px}.placement-card-head div{display:grid;gap:3px}.placement-card-head span,.placement-meta{color:#667085;font-size:12px}.placement-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.sla-pill{font-weight:800;color:#173bcb}.placement-actions-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.placement-score-strip{display:flex;gap:8px;flex-wrap:wrap}.placement-score-strip span{padding:5px 8px;border-radius:999px;background:#f3f6ff;color:#173bcb;font-size:11px;font-weight:800}@media(max-width:1000px){.placement-actions-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.placement-actions-grid{grid-template-columns:1fr}.workforce-week-nav{align-items:stretch;flex-direction:column}}
+.workforce-week-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}
+.placement-list{display:grid;gap:16px;min-width:0}
+.placement-card{display:grid;gap:14px;min-width:0;overflow:hidden}
+.placement-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;min-width:0}
+.placement-card-head div{display:grid;gap:3px;min-width:0}
+.placement-card-head strong{font-size:17px;overflow-wrap:anywhere}
+.placement-card-head span,.placement-meta{color:#667085;font-size:12px}
+.placement-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
+.sla-pill{font-weight:800;color:#173bcb}
+
+/* Placement uses inline action panels, NOT the global floating popover. */
+.placement-actions-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:start;min-width:0}
+.placement-action-details{position:static!important;min-width:0}
+.placement-action-details>summary{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;text-align:center;padding:9px 11px;white-space:normal;line-height:1.2}
+.placement-action-details[open]{grid-column:1/-1;border:1px solid #d9e1ff;border-radius:16px;background:#f9faff;overflow:hidden}
+.placement-action-details[open]>summary{width:auto;margin:12px 12px 0;display:inline-flex;padding-inline:16px}
+.placement-action-details>.form-details-body{display:none}
+.placement-action-details[open]>.form-details-body{display:block;position:static!important;right:auto!important;top:auto!important;width:auto!important;max-width:none!important;margin:0!important;padding:14px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible!important}
+.placement-action-details .form-stack{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0}
+.placement-action-details .form-group{min-width:0}
+.placement-action-details .form-span-2{grid-column:1/-1}
+.placement-action-details .input,.placement-action-details .select,.placement-action-details .textarea{width:100%;min-width:0;max-width:100%}
+.placement-action-details .button{grid-column:1/-1;justify-self:end;min-width:180px}
+.placement-score-strip{display:flex;gap:8px;flex-wrap:wrap;min-width:0}
+.placement-score-strip span{padding:5px 8px;border-radius:999px;background:#f3f6ff;color:#173bcb;font-size:11px;font-weight:800}
+
+@media(max-width:1100px){.placement-actions-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){
+  .placement-actions-grid{grid-template-columns:1fr}
+  .placement-action-details .form-stack{grid-template-columns:1fr}
+  .placement-action-details .form-span-2{grid-column:auto}
+  .placement-action-details .button{grid-column:auto;width:100%;min-width:0;justify-self:stretch}
+  .placement-card-head{flex-direction:column}
+  .workforce-week-nav{align-items:stretch;flex-direction:column}
+}

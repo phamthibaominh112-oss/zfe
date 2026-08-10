@@ -80,6 +80,6 @@ export function Empty({ title, description }: { title: string; description: stri
   return <div className="empty-state"><strong>{title}</strong><p>{description}</p></div>;
 }
 
-export function FormDetails({ title, children }: { title: string; children: ReactNode }) {
-  return <details className="form-details"><summary className="button button-primary">{title}</summary><div className="form-details-body">{children}</div></details>;
+export function FormDetails({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
+  return <details className={`form-details ${className}`.trim()}><summary className="button button-primary">{title}</summary><div className="form-details-body">{children}</div></details>;
 }
