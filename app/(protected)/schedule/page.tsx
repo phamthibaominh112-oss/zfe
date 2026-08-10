@@ -51,6 +51,12 @@ function commonStudentAvailability(studentIds: string[], slots: any[], weekStart
   return rows;
 }
 
+function placementDateParts(value:string){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Ho_Chi_Minh",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(value));
+  const v=Object.fromEntries(parts.map((part)=>[part.type,part.value]));
+  return {date:`${v.year}-${v.month}-${v.day}`,time:`${v.hour}:${v.minute}`};
+}
+
 function modeMatches(classMode: string | null | undefined, teacherMode: string | null | undefined) {
   if (!teacherMode || teacherMode === "Hybrid" || !classMode || classMode === "Hybrid") return true;
   return classMode === teacherMode;
@@ -67,18 +73,19 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const today = vietnamTodayString();
   const supabase = await createClient();
   const { data: ownTeacher } = profile.role === "teacher"
-    ? await supabase.from("teachers").select("id,code,full_name").eq("user_id", profile.id).maybeSingle()
+    ? await supabase.from("teachers").select("id,code,full_name,email,is_placement_assessor").eq("user_id", profile.id).maybeSingle()
     : { data: null as any };
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
-  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments] = await Promise.all([
+  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("teachers").select("id,code,full_name").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("classes").select("id,code,name,mode,status,capacity,programs(name),levels(name)").in("status",["Draft","Waiting","Ready","Active","Paused"]).is("archived_at",null).order("code") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("students").select("id,code,full_name,status").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
-    canManage ? supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name)").eq("status","Active").is("archived_at",null) : Promise.resolve({data:[] as any[]})
+    canManage ? supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name)").eq("status","Active").is("archived_at",null) : Promise.resolve({data:[] as any[]}),
+    profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("placement_speaking_bookings").select("id,teacher_id,scheduled_start,duration_minutes,status,placement_tests(id,status,students(id,code,full_name)),teachers(id,code,full_name)").gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).order("scheduled_start")
   ]);
 
   const selectedClassId = canManage ? String(params.class || "") : "";
@@ -131,6 +138,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     : selectedTeacherId
       ? classFilteredSessions.filter((item:any) => (item.session_teachers || []).some((link:any) => joined(link.teachers)?.id === selectedTeacherId))
       : classFilteredSessions;
+  const allPlacementBookings=(placementBookings.data||[]).filter((b:any)=>joined(b.placement_tests)?.status!=="Cancelled");
+  const visiblePlacementBookings=profile.role==="teacher"
+    ? allPlacementBookings.filter((b:any)=>b.teacher_id===ownTeacher?.id)
+    : selectedTeacherId&&selectedTeacherId!==UNASSIGNED_TEACHER
+      ? allPlacementBookings.filter((b:any)=>b.teacher_id===selectedTeacherId)
+      : selectedTeacherId===UNASSIGNED_TEACHER ? [] : allPlacementBookings;
+
   const totalHours = visibleSessions.reduce((sum: number, item: any) => sum + Number(item.duration_hours || 0), 0);
   const onlineCount = visibleSessions.filter((item: any) => item.mode === "Online").length;
   const offlineCount = visibleSessions.filter((item: any) => item.mode === "Offline").length;
@@ -140,7 +154,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const pageDescription = profile.role === "student"
     ? "Theo dõi lịch học theo tuần và mở link lớp online khi được cập nhật."
     : profile.role === "teacher"
-      ? "Xem lịch dạy theo tuần và cập nhật lịch rảnh khi có thay đổi."
+      ? "Xem lịch lớp + Placement Speaking theo tuần và cập nhật lịch rảnh khi có thay đổi."
       : "Xếp session theo LỚP, sau đó gán GV/TA. Học viên nhận lịch thông qua enrollment vào lớp.";
 
   const actions = <div className="page-actions">
@@ -203,7 +217,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       </form>
     </section> : null}
     <div className="metrics-grid compact-metrics schedule-metrics">
-      <MetricCard label="Buổi trong tuần" value={visibleSessions.length} note={`${formatDate(start)} – ${formatDate(end)}`} />
+      <MetricCard label="Lịch trong tuần" value={visibleSessions.length + visiblePlacementBookings.length} note={`${visibleSessions.length} buổi lớp · ${visiblePlacementBookings.length} Placement`} />
       <MetricCard label="Hôm nay" value={todayCount} tone="yellow" />
       <MetricCard label="Tổng số giờ" value={`${totalHours.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}h`} tone="green" />
       <MetricCard label="Online / Offline" value={`${onlineCount} / ${offlineCount}`} tone="neutral" />
@@ -219,10 +233,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         {days.map((day,index)=>{
           const key=dateOnlyString(day);
           const items=visibleSessions.filter((x:any)=>x.scheduled_date===key);
+          const placementItems=visiblePlacementBookings.filter((x:any)=>placementDateParts(x.scheduled_start).date===key);
           const isToday = key === today;
           return <section className={`day-column ${isToday ? "day-today" : ""}`} key={key}>
-            <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length} buổi</small></div>
-            <div className="day-events">{items.length ? items.map((item:any)=>{
+            <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length + placementItems.length} lịch</small></div>
+            <div className="day-events">
+              {placementItems.map((booking:any)=>{const pt=joined(booking.placement_tests);const st=joined(pt?.students);const dt=placementDateParts(booking.scheduled_start);return <article className={`session-card placement-calendar-card ${booking.status==="Cancelled"?"cancelled":""}`} key={`placement-${booking.id}`}><div className="session-time-row"><strong>{dt.time}</strong><span>15p</span></div><h3>Placement Speaking</h3><p>{st?.code} · {st?.full_name}</p><small>Assessor: {joined(booking.teachers)?.full_name || ownTeacher?.full_name || "GV"}</small><div className="session-footer"><span className="mode-dot placement-mode">Placement</span><Status value={booking.status}/></div><a className="session-link" href="/placement">Mở Placement →</a></article>})}
+              {items.length ? items.map((item:any)=>{
               const classRow = joined(item.classes);
               const teacherLinks = item.session_teachers || [];
               const mainTeacherLink = teacherLinks.find((x:any)=>x.role === "Main teacher") || teacherLinks[0];
@@ -275,7 +292,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   </div>
                 </details> : null}
               </article>;
-            }) : <span className="calendar-empty">Không có lịch</span>}</div>
+            }) : placementItems.length ? null : <span className="calendar-empty">Không có lịch</span>}</div>
           </section>;
         })}
       </div>

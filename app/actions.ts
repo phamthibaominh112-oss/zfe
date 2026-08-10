@@ -907,6 +907,80 @@ export async function rateTeacher(formData: FormData) {
   go("/dashboard", "Cảm ơn bạn đã đánh giá buổi học.");
 }
 
+
+export async function updatePlacementTestBooking(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const placementTestId = text(formData.get("placement_test_id"));
+  const duration = toNumber(formData.get("duration_minutes"));
+  if (![90,180].includes(duration)) go("/placement", undefined, "Placement chỉ dùng block 90 hoặc 180 phút.");
+  const raw = text(formData.get("scheduled_start"));
+  const when = new Date(raw.includes("T") ? `${raw}:00+07:00` : raw);
+  if (!Number.isFinite(when.getTime())) go("/placement", undefined, "Thời gian Placement không hợp lệ.");
+  const { error } = await supabase.from("placement_tests").update({
+    duration_minutes: duration,
+    familiarity: duration === 90 ? "New to IELTS" : "Familiar / Full test",
+    scheduled_start: when.toISOString(),
+    note: text(formData.get("note")) || null,
+    status: "Scheduled",
+    updated_at: new Date().toISOString()
+  }).eq("id", placementTestId);
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement"); revalidatePath("/schedule"); revalidatePath("/dashboard");
+  go("/placement", "Đã cập nhật lịch Placement.");
+}
+
+export async function cancelPlacementTestBooking(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const placementTestId = text(formData.get("placement_test_id"));
+  const reason = text(formData.get("reason"));
+  if (!reason) go("/placement", undefined, "Vui lòng ghi lý do hủy.");
+  const { error } = await supabase.from("placement_tests").update({
+    status: "Cancelled", note: reason, updated_at: new Date().toISOString()
+  }).eq("id", placementTestId);
+  if (error) go("/placement", undefined, error.message);
+  const { error: speakingError } = await supabase.from("placement_speaking_bookings").update({
+    status: "Cancelled", updated_at: new Date().toISOString()
+  }).eq("placement_test_id", placementTestId);
+  if (speakingError) go("/placement", undefined, speakingError.message);
+  revalidatePath("/placement"); revalidatePath("/schedule"); revalidatePath("/dashboard");
+  go("/placement", "Đã hủy Placement và Speaking liên quan.");
+}
+
+export async function updatePlacementSpeakingBooking(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const bookingId = text(formData.get("booking_id"));
+  const teacherId = text(formData.get("teacher_id"));
+  const raw = text(formData.get("scheduled_start"));
+  const when = new Date(raw.includes("T") ? `${raw}:00+07:00` : raw);
+  if (!Number.isFinite(when.getTime())) go("/placement", undefined, "Thời gian Speaking không hợp lệ.");
+  const { data: teacher } = await supabase.from("teachers").select("id,email,is_placement_assessor").eq("id",teacherId).maybeSingle();
+  const founder = ["giaovien@gmail.com","baominh@gmail.com"].includes(String(teacher?.email || "").toLowerCase());
+  if (!teacher || (!teacher.is_placement_assessor && !founder)) go("/placement", undefined, "GV này chưa được phép nhận Placement Speaking.");
+  const { error } = await supabase.from("placement_speaking_bookings").update({
+    teacher_id: teacherId, scheduled_start: when.toISOString(), status: "Booked", updated_at: new Date().toISOString()
+  }).eq("id", bookingId);
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement"); revalidatePath("/schedule"); revalidatePath("/dashboard");
+  go("/placement", "Đã đổi lịch / GV Speaking.");
+}
+
+export async function cancelPlacementSpeakingBooking(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const bookingId = text(formData.get("booking_id"));
+  const reason = text(formData.get("reason"));
+  if (!reason) go("/placement", undefined, "Vui lòng ghi lý do hủy Speaking.");
+  const { error } = await supabase.from("placement_speaking_bookings").update({
+    status: "Cancelled", assessor_note: reason, updated_at: new Date().toISOString()
+  }).eq("id", bookingId);
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement"); revalidatePath("/schedule"); revalidatePath("/dashboard");
+  go("/placement", "Đã hủy Speaking booking.");
+}
+
 export async function createPlacementTest(formData: FormData) {
   const profile = await requireRole(["admin","academic_manager","customer_service"]);
   const supabase = await createClient();
@@ -938,8 +1012,9 @@ export async function bookPlacementSpeaking(formData: FormData) {
   // v1.4.2: booking Speaking dưới 12 giờ vẫn được phép.
   // 12 giờ chỉ còn là khuyến nghị vận hành, không phải hard constraint.
   const teacherId = text(formData.get("teacher_id"));
-  const { data: teacher } = await supabase.from("teachers").select("id,is_placement_assessor").eq("id",teacherId).maybeSingle();
-  if (!teacher?.is_placement_assessor) go("/placement", undefined, "Chỉ GV được đánh dấu Placement Assessor mới nhận lịch Speaking.");
+  const { data: teacher } = await supabase.from("teachers").select("id,email,is_placement_assessor").eq("id",teacherId).maybeSingle();
+  const founder = ["giaovien@gmail.com","baominh@gmail.com"].includes(String(teacher?.email || "").toLowerCase());
+  if (!teacher || (!teacher.is_placement_assessor && !founder)) go("/placement", undefined, "GV này chưa được phép nhận Placement Speaking.");
   const { error } = await supabase.from("placement_speaking_bookings").upsert({
     placement_test_id: text(formData.get("placement_test_id")),
     teacher_id: teacherId,

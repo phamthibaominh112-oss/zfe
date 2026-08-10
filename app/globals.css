@@ -1082,3 +1082,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   line-height:1.45;
 }
 .placement-urgent-note strong{color:#8a6500}
+
+
+/* v1.4.3 — Placement calendar sync + edit/cancel */
+.placement-calendar-card{
+  border-left-color:#7b5cff!important;
+  background:linear-gradient(180deg,#fbf9ff 0%,#fff 100%);
+}
+.placement-calendar-card h3{color:#4d34c9}
+.placement-calendar-card .placement-mode{background:#eee9ff!important;color:#5b3fd1!important}
+.placement-edit-stack{display:grid;gap:12px}
+.placement-cancel-form{border-top:1px solid #f2c7c2;padding-top:12px}
