@@ -66,6 +66,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const end = dateOnlyString(days[6]);
   const today = vietnamTodayString();
   const supabase = await createClient();
+  const { data: ownTeacher } = profile.role === "teacher"
+    ? await supabase.from("teachers").select("id,code,full_name").eq("user_id", profile.id).maybeSingle()
+    : { data: null as any };
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
   const [sessions, availability, studentAvailability, teachers, classes, students, enrollments] = await Promise.all([
@@ -119,7 +122,10 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     })));
 
   const allSessions = sessions.data || [];
-  const classFilteredSessions = selectedClassId ? allSessions.filter((item:any)=>item.class_id === selectedClassId) : allSessions;
+  const ownTeacherSessions = profile.role === "teacher"
+    ? allSessions.filter((item:any)=>(item.session_teachers || []).some((link:any)=>joined(link.teachers)?.id === ownTeacher?.id))
+    : allSessions;
+  const classFilteredSessions = selectedClassId ? ownTeacherSessions.filter((item:any)=>item.class_id === selectedClassId) : ownTeacherSessions;
   const visibleSessions = selectedTeacherId === UNASSIGNED_TEACHER
     ? classFilteredSessions.filter((item:any) => !(item.session_teachers || []).some((link:any) => joined(link.teachers)?.id))
     : selectedTeacherId
@@ -160,7 +166,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
-    {canManage ? <div className="session-team-capability-banner"><strong>v1.3.10 · CO-TEACHER ENABLED · BUILD FIX</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
+    {canManage ? <div className="session-team-capability-banner"><strong>v1.4.0 · DIRECT SESSION ASSIGNMENT + TA</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
     {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
       <div className="teacher-filter-copy">
         <span>Xếp lịch theo lớp</span>

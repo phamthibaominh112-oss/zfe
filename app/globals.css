@@ -1032,3 +1032,5 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   color:#667085;
   line-height:1.35;
 }
+
+.workforce-week-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}.placement-list{display:grid;gap:14px}.placement-card{display:grid;gap:12px}.placement-card-head{display:flex;justify-content:space-between;gap:12px}.placement-card-head div{display:grid;gap:3px}.placement-card-head span,.placement-meta{color:#667085;font-size:12px}.placement-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.sla-pill{font-weight:800;color:#173bcb}.placement-actions-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.placement-score-strip{display:flex;gap:8px;flex-wrap:wrap}.placement-score-strip span{padding:5px 8px;border-radius:999px;background:#f3f6ff;color:#173bcb;font-size:11px;font-weight:800}@media(max-width:1000px){.placement-actions-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.placement-actions-grid{grid-template-columns:1fr}.workforce-week-nav{align-items:stretch;flex-direction:column}}

@@ -907,6 +907,119 @@ export async function rateTeacher(formData: FormData) {
   go("/dashboard", "Cảm ơn bạn đã đánh giá buổi học.");
 }
 
+export async function createPlacementTest(formData: FormData) {
+  const profile = await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const duration = toNumber(formData.get("duration_minutes"));
+  if (![90,180].includes(duration)) go("/placement", undefined, "Placement chỉ dùng block 90 hoặc 180 phút.");
+  const scheduledRaw = text(formData.get("scheduled_start"));
+  const scheduledDate = new Date(`${scheduledRaw}:00+07:00`);
+  if (!Number.isFinite(scheduledDate.getTime())) go("/placement", undefined, "Thời gian Placement không hợp lệ.");
+  const { error } = await supabase.from("placement_tests").insert({
+    student_id: text(formData.get("student_id")),
+    familiarity: duration === 90 ? "New to IELTS" : "Familiar / Full test",
+    duration_minutes: duration,
+    scheduled_start: scheduledDate.toISOString(),
+    note: text(formData.get("note")) || null,
+    status: "Scheduled",
+    created_by: profile.id
+  });
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", `Đã book Placement ${duration} phút.`);
+}
+
+export async function bookPlacementSpeaking(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const raw = text(formData.get("scheduled_start"));
+  const when = new Date(raw.includes("T") ? `${raw}:00+07:00` : raw);
+  if (!Number.isFinite(when.getTime()) || when.getTime() - Date.now() < 12*60*60*1000) go("/placement", undefined, "Speaking phải được book trước ít nhất 12 giờ.");
+  const teacherId = text(formData.get("teacher_id"));
+  const { data: teacher } = await supabase.from("teachers").select("id,is_placement_assessor").eq("id",teacherId).maybeSingle();
+  if (!teacher?.is_placement_assessor) go("/placement", undefined, "Chỉ GV được đánh dấu Placement Assessor mới nhận lịch Speaking.");
+  const { error } = await supabase.from("placement_speaking_bookings").upsert({
+    placement_test_id: text(formData.get("placement_test_id")),
+    teacher_id: teacherId,
+    scheduled_start: when.toISOString(),
+    duration_minutes: 15,
+    status: "Booked"
+  }, { onConflict: "placement_test_id" });
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", "Đã book Speaking 15 phút cho GV assessor.");
+}
+
+export async function updatePlacementRawScores(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("placement_tests").update({
+    listening_score: text(formData.get("listening_score")) ? toNumber(formData.get("listening_score")) : null,
+    reading_score: text(formData.get("reading_score")) ? toNumber(formData.get("reading_score")) : null,
+    writing_score: text(formData.get("writing_score")) ? toNumber(formData.get("writing_score")) : null,
+    objective_note: text(formData.get("objective_note")) || null,
+    completed_at: text(formData.get("completed_at")) || new Date().toISOString(),
+    status: "Completed"
+  }).eq("id", text(formData.get("placement_test_id")));
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", "Đã lưu điểm Placement. Chờ Speaking/Academic validation.");
+}
+
+export async function submitPlacementSpeakingScore(formData: FormData) {
+  const profile = await requireRole(["teacher","admin","academic_manager"]);
+  const supabase = await createClient();
+  const bookingId = text(formData.get("booking_id"));
+  if (profile.role === "teacher") {
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("user_id",profile.id).maybeSingle();
+    const { data: booking } = await supabase.from("placement_speaking_bookings").select("teacher_id").eq("id",bookingId).maybeSingle();
+    if (!teacher || booking?.teacher_id !== teacher.id) go("/placement", undefined, "Bạn không được phân công Speaking booking này.");
+  }
+  const { error } = await supabase.from("placement_speaking_bookings").update({
+    speaking_score: toNumber(formData.get("speaking_score")),
+    assessor_note: text(formData.get("assessor_note")) || null,
+    status: "Completed",
+    completed_at: new Date().toISOString()
+  }).eq("id",bookingId);
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", "Đã lưu điểm Speaking.");
+}
+
+export async function validatePlacementResult(formData: FormData) {
+  const profile = await requireRole(["admin","academic_manager"]);
+  const supabase = await createClient();
+  const { error } = await supabase.from("placement_tests").update({
+    entry_level: text(formData.get("entry_level")),
+    overall_score: text(formData.get("overall_score")) ? toNumber(formData.get("overall_score")) : null,
+    academic_note: text(formData.get("academic_note")) || null,
+    recommendation: text(formData.get("recommendation")) || null,
+    validated_by: profile.id,
+    validated_at: new Date().toISOString(),
+    status: "Validated"
+  }).eq("id", text(formData.get("placement_test_id")));
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", "Academic đã validate kết quả Placement.");
+}
+
+export async function markPlacementFollowup(formData: FormData) {
+  const profile = await requireRole(["admin","customer_service"]);
+  const supabase = await createClient();
+  const { data: row } = await supabase.from("placement_tests").select("validated_at").eq("id", text(formData.get("placement_test_id"))).maybeSingle();
+  if (!row?.validated_at) go("/placement", undefined, "Academic chưa validate kết quả.");
+  const { error } = await supabase.from("placement_tests").update({
+    result_released_at: new Date().toISOString(),
+    followup_at: new Date().toISOString(),
+    followup_note: text(formData.get("followup_note")) || null,
+    followup_by: profile.id,
+    status: "Released"
+  }).eq("id", text(formData.get("placement_test_id")));
+  if (error) go("/placement", undefined, error.message);
+  revalidatePath("/placement");
+  go("/placement", "Đã ghi nhận trả điểm và tư vấn follow-up.");
+}
+
 export async function adminCreateUser(formData: FormData) {
   await requireRole(["admin"]);
   const email = text(formData.get("email")).toLowerCase();
@@ -1340,12 +1453,13 @@ export async function updateTeacherHourlyRate(formData: FormData) {
   const month = text(formData.get("return_month"));
   const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
   const hourlyRate = toNumber(formData.get("hourly_rate"));
-  if (hourlyRate < 50000 || hourlyRate > 1500000) {
-    go(target, undefined, "Đơn giá giờ dạy phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
-  }
+  const taHourlyRate = toNumber(formData.get("ta_hourly_rate"));
+  if (hourlyRate < 50000 || hourlyRate > 1500000) go(target, undefined, "Đơn giá giờ dạy phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
+  if (taHourlyRate < 0 || taHourlyRate > 1500000) go(target, undefined, "Đơn giá TA phải từ 0đ đến 1.500.000đ mỗi giờ.");
   const { error } = await supabase.rpc("update_teacher_compensation_rate", {
     p_teacher_id: teacherId,
     p_hourly_rate: hourlyRate,
+    p_ta_hourly_rate: taHourlyRate,
     p_effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
     p_note: text(formData.get("note")) || null
   });

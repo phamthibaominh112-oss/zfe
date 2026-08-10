@@ -144,7 +144,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </Panel> : null}
       {profile.role === "admin" ? <div className="dashboard-main-grid section-gap">
         <Panel title="Đơn giá giờ dạy" description="Chỉnh nhanh tại Dashboard; mức mới hiển thị ngay trên tài khoản GV." action={<Link className="text-link" href="/payroll">Quản lý lương →</Link>}>
-          {adminTeacherRates.length ? <div className="dashboard-rate-list">{adminTeacherRates.slice(0,8).map((teacher:any)=>{const setting=joined(teacher.teacher_compensation_settings);return <form action={updateTeacherHourlyRate} className="dashboard-rate-row" key={teacher.id}><input type="hidden" name="teacher_id" value={teacher.id}/><input type="hidden" name="return_month" value={today.slice(0,7)}/><input type="hidden" name="return_path" value="/dashboard"/><input type="hidden" name="effective_from" value={setting?.effective_from || `${today.slice(0,7)}-01`}/><div><strong>{teacher.full_name}</strong><small>{teacher.code}</small></div><Field label="VNĐ/giờ (50k–1,5tr)" name="hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={Number(setting?.hourly_rate || 0) || ""} required/><button className="button button-secondary button-small">Lưu</button></form>})}</div> : <Empty title="Chưa có giáo viên" description="Đơn giá sẽ xuất hiện sau khi hồ sơ giáo viên được tạo."/>}
+          {adminTeacherRates.length ? <div className="dashboard-rate-list">{adminTeacherRates.slice(0,8).map((teacher:any)=>{const setting=joined(teacher.teacher_compensation_settings);return <form action={updateTeacherHourlyRate} className="dashboard-rate-row" key={teacher.id}><input type="hidden" name="teacher_id" value={teacher.id}/><input type="hidden" name="return_month" value={today.slice(0,7)}/><input type="hidden" name="return_path" value="/dashboard"/><input type="hidden" name="effective_from" value={setting?.effective_from || `${today.slice(0,7)}-01`}/><div><strong>{teacher.full_name}</strong><small>{teacher.code}</small></div><Field label="Teaching / giờ" name="hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={Number(setting?.hourly_rate || 0) || ""} required/><Field label="TA / giờ" name="ta_hourly_rate" type="number" min="0" max="1500000" step="1000" defaultValue={Number(setting?.ta_hourly_rate || 0) || ""} required/><button className="button button-secondary button-small">Lưu</button></form>})}</div> : <Empty title="Chưa có giáo viên" description="Đơn giá sẽ xuất hiện sau khi hồ sơ giáo viên được tạo."/>}
         </Panel>
         <Panel title="Cân đối doanh thu – chi phí" description="Khu vực dữ liệu tổng hợp theo tháng, sẵn sàng cho import sau này." action={<Link className="text-link" href="/finance/reports">Mở báo cáo →</Link>}>
           {importedMonthlyBalance ? <div className="metrics-grid compact-metrics"><MetricCard label="Doanh thu" value={formatMoney(importedMonthlyBalance.revenue_amount)} tone="green"/><MetricCard label="Tổng chi" value={formatMoney(importedMonthlyBalance.total_expense)} tone="red"/><MetricCard label="Kết quả" value={formatMoney(importedMonthlyBalance.operating_result)} tone={Number(importedMonthlyBalance.operating_result)>=0?"blue":"red"}/></div> : <Empty title="Chưa có dữ liệu cân đối tháng" description="Hiện đang để trống. Mẫu CSV và hàm đồng bộ đã được chuẩn bị để nhập dữ liệu sau."/>}
@@ -154,22 +154,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   if (profile.role === "teacher") {
-    const { data: teacher } = await supabase.from("teachers").select("id,full_name").eq("user_id", profile.id).single();
+    const { data: teacher } = await supabase.from("teachers").select("id,full_name,is_placement_assessor").eq("user_id", profile.id).single();
     const { data: classAssignments } = teacher ? await supabase.from("class_teachers").select("class_id,classes(id,code,name,status)").eq("teacher_id", teacher.id) : { data: [] as any[] };
-    const classIds = (classAssignments || []).map((x: any) => x.class_id);
-    const [sessions, hours, feedback, observations, roster, payrollStatement, compensation, livePayroll, kpiLive] = await Promise.all([
-      classIds.length ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(role,teachers(id,code,full_name))").in("class_id", classIds).gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).is("archived_at", null).order("scheduled_date").order("start_time") : Promise.resolve({ data: [] as any[] }),
+    const assignedClassIds = (classAssignments || []).map((x: any) => x.class_id);
+    const [sessionQuery, hours, feedback, observations, payrollStatement, compensation, livePayroll, kpiLive] = await Promise.all([
+      teacher ? supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).is("archived_at", null).order("scheduled_date").order("start_time") : Promise.resolve({ data: [] as any[] }),
       teacher ? supabase.from("teacher_monthly_hours").select("completed_hours").eq("teacher_id", teacher.id).eq("month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       supabase.from("progress_feedback").select("id,status,milestone,enrollments(students(full_name),classes(code))").eq("submitted_by", profile.id).order("updated_at", { ascending: false }).limit(8),
       teacher ? supabase.from("teacher_observations").select("id,total_score,status,strengths,areas_to_improve,shared_at").eq("teacher_id", teacher.id).order("created_at", { ascending: false }).limit(4) : Promise.resolve({ data: [] as any[] }),
-      classIds.length ? supabase.from("enrollments").select("class_id,status,students(id,code,full_name)").in("class_id", classIds).is("archived_at", null) : Promise.resolve({ data: [] as any[] }),
       teacher ? supabase.from("teacher_payroll_statements").select("id,completed_hours,hourly_rate_snapshot,gross_amount,teacher_status,admin_status").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       teacher ? supabase.from("teacher_compensation_settings").select("hourly_rate,effective_from").eq("teacher_id", teacher.id).maybeSingle() : Promise.resolve({ data: null as any }),
       teacher ? supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any }),
       teacher ? supabase.from("teacher_kpi_live_monthly").select("overall_compliance_rate,punctuality_rate,assignment_compliance_rate,grading_compliance_rate").eq("teacher_id", teacher.id).eq("kpi_month", `${today.slice(0,7)}-01`).maybeSingle() : Promise.resolve({ data: null as any })
     ]);
+    const teacherSessions = (sessionQuery.data || []).filter((item:any)=>(item.session_teachers || []).some((link:any)=>joined(link.teachers)?.id === teacher?.id));
+    const sessionClassIds = teacherSessions.map((item:any)=>item.class_id);
+    const classIds = Array.from(new Set([...assignedClassIds, ...sessionClassIds]));
+    const { data: rosterRows } = classIds.length ? await supabase.from("enrollments").select("class_id,status,students(id,code,full_name)").in("class_id", classIds).is("archived_at", null) : { data: [] as any[] };
+    const sessions = { data: teacherSessions };
     const teacherStudentMap = new Map<string, any>();
-    for (const row of roster.data || []) {
+    for (const row of rosterRows || []) {
       const studentRow = joined((row as any).students);
       if (studentRow?.id) teacherStudentMap.set(String(studentRow.id), studentRow);
     }
@@ -194,6 +198,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       />
       <div className="quick-actions-grid">
         <QuickAction href="/workforce" icon="KPI" title="Check-in & KPI" description="Chấm công buổi dạy và xem KPI tuân thủ" />
+        {teacher?.is_placement_assessor ? <QuickAction href="/placement" icon="PT" title="Placement Speaking" description="Xem booking Speaking 15 phút được CSKH phân công" tone="yellow" /> : null}
         <QuickAction href="/academic" icon="✓" title="Điểm danh & bài tập" description="Attendance, BTVN và chấm chữa" />
         <QuickAction href="/schedule" icon="◷" title="Lịch rảnh" description="Book lịch rảnh cho các tuần tới" tone="yellow" />
         <QuickAction href="/payroll" icon="₫" title="Lương tháng" description={`${payrollHours.toLocaleString("vi-VN")} giờ · ${formatMoney(payrollAmount)}`} tone="green" />
