@@ -11,12 +11,13 @@ export default async function ClassPlannerPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: classes, error }, { data: students }, { data: enrollments }, { data: teacherLinks }, { data: teachers }] = await Promise.all([
+  const [{ data: classes, error }, { data: students }, { data: enrollments }, { data: teacherLinks }, { data: teachers }, { data: upcomingSessions }] = await Promise.all([
     supabase.from("classes").select("id,code,name,category,mode,campus,capacity,status,programs(name),levels(name)").in("status",["Draft","Waiting","Ready","Active","Paused"]).is("archived_at",null).order("code"),
     supabase.from("students").select("id,code,full_name,status,entry_level,target").is("archived_at",null).order("full_name"),
     supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name,status)").is("archived_at",null).eq("status","Active"),
     supabase.from("class_teachers").select("class_id,role,payroll_factor,teachers(id,code,full_name)").in("role",["Main teacher","Assistant"]),
-    supabase.from("teachers").select("id,code,full_name,employment_status").eq("employment_status","Active").is("archived_at",null).order("full_name")
+    supabase.from("teachers").select("id,code,full_name,employment_status").eq("employment_status","Active").is("archived_at",null).order("full_name"),
+    supabase.from("sessions").select("id,class_id,scheduled_date,status").gte("scheduled_date",new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"})).neq("status","Cancelled").is("archived_at",null)
   ]);
 
   const activeStudentIds = new Set((enrollments || []).map((x:any)=>x.student_id));
@@ -30,6 +31,8 @@ export default async function ClassPlannerPage({ searchParams }: { searchParams:
     rows.push({ id: student.id, code: student.code, full_name: student.full_name, status: student.status });
     rosterByClass.set((enrollment as any).class_id, rows);
   }
+
+  const scheduledClassIds=new Set((upcomingSessions||[]).map((x:any)=>x.class_id));
 
   const teamByClass = new Map<string, any[]>();
   for (const link of teacherLinks || []) {
@@ -47,6 +50,7 @@ export default async function ClassPlannerPage({ searchParams }: { searchParams:
       <span>HV → kéo vào lớp → lớp có roster 1–n HV → set GV chính/TA → xếp session cho LỚP → tất cả HV trong roster nhận cùng lịch lớp.</span>
     </div>
 
+    {(()=>{const rows=(classes||[]).filter((item:any)=>{const team=teamByClass.get(item.id)||[];return !team.some((x:any)=>x.role==="Main teacher")||!scheduledClassIds.has(item.id)});return rows.length?<div className="unassigned-class-warning"><div><strong>⚠ {rows.length} lớp cần xếp</strong><span>Thiếu GV chính hoặc chưa có session sắp tới.</span></div><div className="unassigned-class-chips">{rows.slice(0,12).map((item:any)=><a href={`#class-${item.id}`} key={item.id}>{item.code}</a>)}</div></div>:null;})()}
     <div className="class-planner-layout">
       <aside><WaitingStudentPool students={waitingStudents}/></aside>
       <section className="class-planner-board">
@@ -55,12 +59,12 @@ export default async function ClassPlannerPage({ searchParams }: { searchParams:
           const team = teamByClass.get(item.id) || [];
           const main = team.find((x:any)=>x.role === "Main teacher");
           const assistant = team.find((x:any)=>x.role === "Assistant");
-          return <article className="planner-class-card" key={item.id}>
+          const missingTeacher=!main; const missingSchedule=!scheduledClassIds.has(item.id); return <article className={`planner-class-card ${missingTeacher||missingSchedule?"planner-class-needs-action":""}`} id={`class-${item.id}`} key={item.id}>
             <div className="planner-class-head">
               <div><div className="planner-class-code">{item.code}</div><h2>{item.name}</h2><p>{item.programs?.name || "Chưa có chương trình"} · {item.levels?.name || "Chưa có level"}</p></div>
               <Status value={item.status}/>
             </div>
-            <div className="planner-class-tags"><span>{item.category}</span><span>{item.mode}</span><span>{item.campus || "Chưa có cơ sở"}</span></div>
+            <div className="planner-class-tags"><span>{item.category}</span><span>{item.mode}</span><span>{item.campus || "Chưa có cơ sở"}</span>{missingTeacher?<span className="planner-warning-tag">⚠ Chưa có GV chính</span>:null}{missingSchedule?<span className="planner-warning-tag">⚠ Chưa có lịch</span>:null}</div>
 
             <ClassRosterDropzone classId={item.id} classCode={item.code} capacity={Number(item.capacity || 1)} students={roster}/>
 

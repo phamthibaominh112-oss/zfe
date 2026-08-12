@@ -1,4 +1,4 @@
-import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
+import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, duplicatePreviousWeekSchedule, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
@@ -158,12 +158,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       : "Xếp session theo LỚP, sau đó gán GV/TA. Học viên nhận lịch thông qua enrollment vào lớp.";
 
   const actions = <div className="page-actions">
-    {profile.role !== "student" ? <FormDetails title={profile.role === "teacher" ? "Cập nhật lịch rảnh" : "Thêm lịch rảnh GV"}><form action={createTeacherAvailability}><FormGrid>
+    {profile.role !== "student" ? <FormDetails title={profile.role === "teacher" ? "Cập nhật lịch rảnh" : "Thêm lịch rảnh GV"}><form action={createTeacherAvailability}><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><FormGrid>
       {canManage ? <SelectField label="Giáo viên" name="teacher_id" required options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/> : null}
       <SelectField label="Ngày" name="weekday" required options={DAY_LABELS.map((label,index)=>({value:String(index+1),label}))}/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/>
       <SelectField label="Hình thức" name="mode" options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><Field label="Cơ sở" name="campus"/>
-      <Field label="Hiệu lực từ" name="effective_from" type="date" required defaultValue={today}/><Field label="Hiệu lực đến" name="effective_to" type="date"/>
+      <Field label="Hiệu lực từ" name="effective_from" type="date" required defaultValue={start}/><Field label="Hiệu lực đến" name="effective_to" type="date"/>
       <label className="checkbox-row"><input name="is_recurring" type="checkbox" defaultChecked/>Lặp hàng tuần</label><TextAreaField label="Ghi chú" name="note"/>
       <div className="form-actions"><button className="button button-primary">Lưu lịch rảnh</button></div>
     </FormGrid></form></FormDetails> : null}
@@ -175,6 +175,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <Field label="Cơ sở" name="campus"/><Field label="Phòng" name="room"/><Field label="Link lớp" name="meeting_url"/><Field label="Nội dung" name="topic"/>
       <div className="form-actions"><button className="button button-primary">Tạo buổi học</button></div>
     </FormGrid></form></FormDetails> : null}
+    {canManage ? <form action={duplicatePreviousWeekSchedule}><input type="hidden" name="target_week_start" value={start}/><input type="hidden" name="return_week" value={String(safeOffset)}/><button className="button button-secondary" title="Copy tuần trước sang tuần đang xem và tự tăng số buổi">⧉ Duplicate tuần trước + tăng buổi</button></form> : null}
   </div>;
 
   return <>
@@ -313,7 +314,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {availability.data?.length ? <div className="compact-list">{availability.data.map((item:any)=>{ const teacherRow = joined(item.teachers); return <div className="compact-row availability-manage-row" key={item.id}>
               <div><strong>{teacherRow?.full_name || "Giáo viên"}</strong><span>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span><small>{item.mode || "Linh hoạt"} · {item.campus || "Mọi cơ sở"}</small></div>
               <details className="inline-details"><summary className="button button-ghost button-small">Điều chỉnh</summary><div className="inline-edit-form availability-edit-panel">
-                <form action={updateTeacherAvailability} className="form-stack"><input type="hidden" name="availability_id" value={item.id}/>
+                <form action={updateTeacherAvailability} className="form-stack"><input type="hidden" name="availability_id" value={item.id}/><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/>
                   <SelectField label="Giáo viên" name="teacher_id" required defaultValue={teacherRow?.id || ""} options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
                   <SelectField label="Ngày" name="weekday" required defaultValue={String(item.weekday)} options={DAY_LABELS.map((label,index)=>({value:String(index+1),label}))}/>
                   <Field label="Bắt đầu" name="start_time" type="time" required defaultValue={item.start_time?.slice(0,5)}/>
@@ -326,7 +327,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                   <TextAreaField label="Ghi chú" name="note" defaultValue={item.note || ""}/>
                   <button className="button button-primary">Lưu thay đổi</button>
                 </form>
-                <form action={deleteTeacherAvailability} className="availability-delete-form"><input type="hidden" name="availability_id" value={item.id}/><label className="checkbox-row"><input name="confirm" type="checkbox" required/>Xác nhận xóa slot này</label><button className="button button-danger">Xóa lịch rảnh</button></form>
+                <form action={deleteTeacherAvailability} className="availability-delete-form"><input type="hidden" name="availability_id" value={item.id}/><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><label className="checkbox-row"><input name="confirm" type="checkbox" required/>Xác nhận xóa slot này</label><button className="button button-danger">Xóa lịch rảnh</button></form>
               </div></details>
             </div>; })}</div> : <Empty title="Chưa có lịch rảnh GV" description="Thêm availability để bắt đầu matching."/>}
           </Panel>

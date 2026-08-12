@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { createStudentAvailability, updateStudent } from "@/app/actions";
+import { createStudentAvailability, updateEnrollmentTimeline, updateStudent } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { PageHeader, Panel, Status, Flash, FormDetails, Empty } from "@/components/ui";
 import { requireProfile } from "@/lib/auth";
@@ -88,6 +88,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
     <PageHeader eyebrow="Hồ sơ học viên" title={`${student.code} · ${student.full_name}`} description={profile.role === "teacher" ? "Theo dõi lớp học, điểm danh, bài tập và kết quả học tập." : "Thông tin tổng hợp về lớp học, tiến độ, lịch và học phí của học viên."} actions={actions} />
     <Flash message={messages.message} error={messages.error} />
 
+    {(()=>{const active=(enrollments||[]).find((x:any)=>x.status==="Active"&&x.end_date);if(!active)return null;const days=Math.ceil((new Date(`${active.end_date}T00:00:00`).getTime()-Date.now())/86400000);return days<=30?<div className={`student-renewal-warning ${days<0?"overdue":days<=7?"urgent":""}`}><strong>{days<0?"Đã qua End date":days===0?"End date hôm nay":`Còn ${days} ngày tới End date`}</strong><span>{active.classes?.code} · CSKH cần chuẩn bị tái phí / gia hạn.</span></div>:null;})()}
     <Panel title="Thông tin tổng quan" description="Dữ liệu hồ sơ gốc">
       <div className="profile-grid">
         <div className="profile-item"><span>Trạng thái</span><strong><Status value={student.status}/></strong></div>
@@ -105,7 +106,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
 
     <div className="grid-2 section-gap">
       <Panel title="Lớp học & lộ trình" description="Các lớp học viên đang hoặc đã tham gia">
-        {enrollments?.length ? <div className="alert-list">{enrollments.map((item: any) => <div className="alert-item" key={item.id}><i/><div><strong>{item.classes?.code} · {item.classes?.name}</strong><span>{item.classes?.category} · {item.classes?.mode} · Target: {item.target || item.classes?.target || "—"}</span></div><Status value={item.status}/></div>)}</div> : <Empty title="Chưa được xếp lớp" description="Học vụ sẽ xếp học viên vào lớp phù hợp." />}
+        {enrollments?.length ? <div className="enrollment-timeline-list">{enrollments.map((item: any) => <div className="enrollment-timeline-card" key={item.id}><div className="enrollment-timeline-main"><div><strong>{item.classes?.code} · {item.classes?.name}</strong><span>{item.classes?.category} · {item.classes?.mode} · Target: {item.target || item.classes?.target || "—"}</span></div><Status value={item.status}/></div><div className="enrollment-date-strip"><div><span>Start date</span><strong>{formatDate(item.start_date)}</strong></div><div><span>End date</span><strong>{item.end_date?formatDate(item.end_date):"Chưa set"}</strong></div></div>{canEditProfile?<details className="inline-details enrollment-date-edit"><summary className="button button-secondary button-small">Sửa Start / End date</summary><form action={updateEnrollmentTimeline} className="form-stack"><input type="hidden" name="enrollment_id" value={item.id}/><input type="hidden" name="student_id" value={student.id}/><Field label="Start date" name="start_date" type="date" required defaultValue={item.start_date}/><Field label="End date / hạn dự kiến" name="end_date" type="date" defaultValue={item.end_date||""}/><button className="button button-primary">Lưu timeline</button></form></details>:null}</div>)}</div> : <Empty title="Chưa được xếp lớp" description="Học vụ sẽ xếp học viên vào lớp phù hợp." />}
       </Panel>
       <Panel title="Lịch học sắp tới" description="Session-level schedule">
         {upcomingSessions.data?.length ? <div className="alert-list">{upcomingSessions.data.map((item: any) => <div className="alert-item" key={item.id}><i/><div><strong>{item.classes?.code} · Session {item.session_no}</strong><span>{formatDate(item.scheduled_date)} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span></div><Status value={item.status}/></div>)}</div> : <Empty title="Chưa có lịch" description="Session mới sẽ xuất hiện sau khi học vụ tạo lịch." />}

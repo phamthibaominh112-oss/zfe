@@ -23,6 +23,17 @@ function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
+function scheduleReturnPath(formData: FormData) {
+  const params = new URLSearchParams();
+  const week = text(formData.get("return_week"));
+  const teacher = text(formData.get("return_teacher"));
+  const classId = text(formData.get("return_class"));
+  if (week) params.set("week", week);
+  if (teacher) params.set("teacher", teacher);
+  if (classId) params.set("class", classId);
+  return `/schedule${params.size ? `?${params.toString()}` : ""}`;
+}
+
 export async function createStudent(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager", "customer_service"]);
   const supabase = await createClient();
@@ -74,6 +85,24 @@ export async function updateStudent(formData: FormData) {
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
   go(`/students/${studentId}`, "Đã cập nhật hồ sơ học viên.");
+}
+
+export async function updateEnrollmentTimeline(formData: FormData) {
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase = await createClient();
+  const enrollmentId = text(formData.get("enrollment_id"));
+  const studentId = text(formData.get("student_id"));
+  const startDate = text(formData.get("start_date"));
+  const endDate = text(formData.get("end_date"));
+  if (!enrollmentId || !studentId) go("/students", undefined, "Không xác định được enrollment.");
+  if (!startDate) go(`/students/${studentId}`, undefined, "Start date là bắt buộc.");
+  if (endDate && endDate < startDate) go(`/students/${studentId}`, undefined, "End date không thể trước Start date.");
+  const { error } = await supabase.from("enrollments").update({
+    start_date:startDate,end_date:endDate||null,updated_at:new Date().toISOString()
+  }).eq("id",enrollmentId);
+  if (error) go(`/students/${studentId}`,undefined,error.message);
+  revalidatePath(`/students/${studentId}`); revalidatePath("/students"); revalidatePath("/dashboard"); revalidatePath("/finance");
+  go(`/students/${studentId}`,"Đã cập nhật Start date / End date.");
 }
 
 export async function createStudentAvailability(formData: FormData) {
@@ -234,6 +263,7 @@ export async function enrollStudent(formData: FormData) {
     class_id: classId,
     student_id: text(formData.get("student_id")),
     start_date: text(formData.get("start_date")) || new Date().toISOString().slice(0, 10),
+    end_date: text(formData.get("end_date")) || null,
     status: "Active",
     target: text(formData.get("target")) || null,
     enrolled_by: profile.id
@@ -332,9 +362,10 @@ export async function createTeacherAvailability(formData: FormData) {
     note: text(formData.get("note")) || null,
     created_by: profile.id
   });
-  if (error) go("/schedule", undefined, error.message);
+  const returnPath = scheduleReturnPath(formData);
+  if (error) go(returnPath, undefined, error.message);
   revalidatePath("/schedule");
-  go("/schedule", "Đã lưu lịch rảnh giáo viên.");
+  go(returnPath, "Đã lưu lịch rảnh giáo viên.");
 }
 
 export async function updateTeacherAvailability(formData: FormData) {
@@ -354,20 +385,22 @@ export async function updateTeacherAvailability(formData: FormData) {
     is_recurring: formData.get("is_recurring") === "on",
     note: text(formData.get("note")) || null
   }).eq("id", availabilityId);
-  if (error) go("/schedule", undefined, error.message);
+  const returnPath = scheduleReturnPath(formData);
+  if (error) go(returnPath, undefined, error.message);
   revalidatePath("/schedule");
-  go("/schedule", "Đã điều chỉnh lịch rảnh giáo viên.");
+  go(returnPath, "Đã điều chỉnh lịch rảnh giáo viên.");
 }
 
 export async function deleteTeacherAvailability(formData: FormData) {
   await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
   const availabilityId = text(formData.get("availability_id"));
-  if (formData.get("confirm") !== "on") go("/schedule", undefined, "Vui lòng xác nhận trước khi xóa lịch rảnh.");
+  const returnPath = scheduleReturnPath(formData);
+  if (formData.get("confirm") !== "on") go(returnPath, undefined, "Vui lòng xác nhận trước khi xóa lịch rảnh.");
   const { error } = await supabase.from("teacher_availability").delete().eq("id", availabilityId);
-  if (error) go("/schedule", undefined, error.message);
+  if (error) go(returnPath, undefined, error.message);
   revalidatePath("/schedule");
-  go("/schedule", "Đã xóa lịch rảnh giáo viên.");
+  go(returnPath, "Đã xóa lịch rảnh giáo viên.");
 }
 
 export async function updateSessionTeachingTeam(formData: FormData) {
@@ -551,6 +584,55 @@ export async function archiveSessionSchedule(formData: FormData) {
   go("/schedule", "Đã xóa buổi học khỏi lịch. Dữ liệu vẫn được lưu trong lịch sử.");
 }
 
+export async function duplicatePreviousWeekSchedule(formData: FormData) {
+  const profile=await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const targetStart=text(formData.get("target_week_start"));
+  const returnWeek=text(formData.get("return_week"))||"0";
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(targetStart)) go("/schedule",undefined,"Tuần đích không hợp lệ.");
+  const targetStartDate=new Date(`${targetStart}T00:00:00Z`);
+  const sourceStartDate=new Date(targetStartDate); sourceStartDate.setUTCDate(sourceStartDate.getUTCDate()-7);
+  const sourceEndDate=new Date(sourceStartDate); sourceEndDate.setUTCDate(sourceEndDate.getUTCDate()+6);
+  const targetEndDate=new Date(targetStartDate); targetEndDate.setUTCDate(targetEndDate.getUTCDate()+6);
+  const sourceStart=sourceStartDate.toISOString().slice(0,10), sourceEnd=sourceEndDate.toISOString().slice(0,10), targetEnd=targetEndDate.toISOString().slice(0,10);
+
+  const { data: sourceRows,error:sourceError }=await supabase.from("sessions")
+    .select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,meeting_url,topic,status,session_teachers(teacher_id,role,payroll_factor)")
+    .gte("scheduled_date",sourceStart).lte("scheduled_date",sourceEnd).neq("status","Cancelled").is("archived_at",null).order("scheduled_date").order("start_time");
+  if(sourceError) go(`/schedule?week=${returnWeek}`,undefined,sourceError.message);
+  if(!sourceRows?.length) go(`/schedule?week=${returnWeek}`,undefined,"Tuần trước không có session để duplicate.");
+
+  const classIds=Array.from(new Set(sourceRows.map((x:any)=>x.class_id)));
+  const [{data:priorRows},{data:targetRows}]=await Promise.all([
+    supabase.from("sessions").select("class_id,session_no").in("class_id",classIds).lt("scheduled_date",targetStart).neq("status","Cancelled").is("archived_at",null),
+    supabase.from("sessions").select("class_id,scheduled_date,start_time").in("class_id",classIds).gte("scheduled_date",targetStart).lte("scheduled_date",targetEnd).neq("status","Cancelled").is("archived_at",null)
+  ]);
+  const nextNo=new Map<string,number>();
+  for(const classId of classIds){
+    const maxNo=Math.max(0,...(priorRows||[]).filter((x:any)=>x.class_id===classId).map((x:any)=>Number(x.session_no||0)));
+    nextNo.set(classId,maxNo+1);
+  }
+  const existing=new Set((targetRows||[]).map((x:any)=>`${x.class_id}|${x.scheduled_date}|${String(x.start_time).slice(0,5)}`));
+  let created=0, skipped=0;
+  for(const src of sourceRows as any[]){
+    const d=new Date(`${src.scheduled_date}T00:00:00Z`); d.setUTCDate(d.getUTCDate()+7);
+    const scheduledDate=d.toISOString().slice(0,10);
+    const key=`${src.class_id}|${scheduledDate}|${String(src.start_time).slice(0,5)}`;
+    if(existing.has(key)){skipped++;continue;}
+    const sessionNo=nextNo.get(src.class_id)||1; nextNo.set(src.class_id,sessionNo+1);
+    const {data:newSession,error:createError}=await supabase.from("sessions").insert({
+      class_id:src.class_id,session_no:sessionNo,scheduled_date:scheduledDate,start_time:src.start_time,end_time:src.end_time,
+      duration_hours:src.duration_hours,mode:src.mode,campus:src.campus,room:src.room,meeting_url:src.meeting_url,topic:src.topic,status:"Scheduled",created_by:profile.id
+    }).select("id").single();
+    if(createError||!newSession) go(`/schedule?week=${returnWeek}`,undefined,createError?.message||"Không duplicate được session.");
+    const staff=(src.session_teachers||[]).map((l:any)=>({session_id:newSession.id,teacher_id:l.teacher_id,role:l.role,payroll_factor:l.payroll_factor??1}));
+    if(staff.length){const {error:staffError}=await supabase.from("session_teachers").insert(staff); if(staffError) go(`/schedule?week=${returnWeek}`,undefined,staffError.message);}
+    existing.add(key); created++;
+  }
+  revalidatePath("/schedule"); revalidatePath("/dashboard");
+  go(`/schedule?week=${returnWeek}`,`Đã duplicate ${created} session từ tuần trước${skipped?` · bỏ qua ${skipped} session đã tồn tại`:""}. Số buổi tự tăng tiếp nối.`);
+}
+
 export async function createSession(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();
@@ -634,6 +716,37 @@ export async function completeSession(formData: FormData) {
   revalidatePath("/academic");
   revalidatePath("/dashboard");
   go("/academic", "Session đã được xác nhận hoàn thành.");
+}
+
+export async function quickMarkAttendance(formData: FormData) {
+  const profile = await requireRole(["admin","academic_manager","teacher"]);
+  const supabase = await createClient();
+  const sessionId=text(formData.get("session_id"));
+  const studentId=text(formData.get("student_id"));
+  const status=text(formData.get("status"));
+  const lateMinutes=status==="Late"?Math.max(0,toNumber(formData.get("late_minutes"),5)):0;
+  const { error }=await supabase.from("attendance").upsert({
+    session_id:sessionId,student_id:studentId,status,late_minutes:lateMinutes,
+    reason:text(formData.get("reason"))||null,marked_by:profile.id,marked_at:new Date().toISOString()
+  },{onConflict:"session_id,student_id"});
+  if(error) go("/academic",undefined,error.message);
+  revalidatePath("/academic"); revalidatePath(`/students/${studentId}`);
+  go("/academic",`Đã điểm danh: ${status}.`);
+}
+
+export async function markAllPresentForSession(formData: FormData) {
+  const profile=await requireRole(["admin","academic_manager","teacher"]);
+  const supabase=await createClient();
+  const sessionId=text(formData.get("session_id"));
+  const classId=text(formData.get("class_id"));
+  const { data: roster,error:rosterError }=await supabase.from("enrollments").select("student_id").eq("class_id",classId).eq("status","Active").is("archived_at",null);
+  if(rosterError) go("/academic",undefined,rosterError.message);
+  if(!roster?.length) go("/academic",undefined,"Lớp chưa có học viên active.");
+  const rows=roster.map((r:any)=>({session_id:sessionId,student_id:r.student_id,status:"Present",late_minutes:0,marked_by:profile.id,marked_at:new Date().toISOString()}));
+  const { error }=await supabase.from("attendance").upsert(rows,{onConflict:"session_id,student_id"});
+  if(error) go("/academic",undefined,error.message);
+  revalidatePath("/academic");
+  go("/academic",`Đã đánh dấu có mặt cho ${rows.length} học viên.`);
 }
 
 export async function markAttendance(formData: FormData) {
@@ -1684,6 +1797,47 @@ export async function createStaffWorkSchedule(formData: FormData) {
   revalidatePath("/workforce");
   revalidatePath("/dashboard");
   go("/workforce", "Đã đăng ký lịch làm.");
+}
+
+export async function adminOverrideTeacherCheckin(formData: FormData) {
+  const profile=await requireRole(["admin"]);
+  const admin=createAdminClient();
+  const sessionId=text(formData.get("session_id")), teacherId=text(formData.get("teacher_id"));
+  const checkInAt=text(formData.get("check_in_at")), checkOutAt=text(formData.get("check_out_at")), reason=text(formData.get("reason"));
+  if(!sessionId||!teacherId||!checkInAt||!reason) go("/workforce",undefined,"Thiếu thông tin override GV.");
+  if(checkOutAt&&new Date(checkOutAt).getTime()<new Date(checkInAt).getTime()) go("/workforce",undefined,"Check-out không thể trước Check-in.");
+  const {data:session,error:sessionError}=await admin.from("sessions").select("scheduled_date,start_time").eq("id",sessionId).single();
+  if(sessionError||!session) go("/workforce",undefined,sessionError?.message||"Không tìm thấy session.");
+  const scheduledStart=new Date(`${session.scheduled_date}T${String(session.start_time).slice(0,8)}+07:00`);
+  const lateMinutes=Math.max(0,Math.round((new Date(checkInAt).getTime()-scheduledStart.getTime())/60000));
+  const {error}=await admin.from("teacher_session_checkins").upsert({
+    session_id:sessionId,teacher_id:teacherId,check_in_at:new Date(checkInAt).toISOString(),
+    check_out_at:checkOutAt?new Date(checkOutAt).toISOString():null,late_minutes:lateMinutes,early_checkout_minutes:0,
+    status:"Adjusted",adjustment_note:reason,adjusted_by:profile.id,updated_at:new Date().toISOString()
+  },{onConflict:"session_id,teacher_id"});
+  if(error) go("/workforce",undefined,error.message);
+  revalidatePath("/workforce"); revalidatePath("/dashboard"); revalidatePath("/payroll");
+  go("/workforce","Admin đã override Check-in/Check-out của giáo viên.");
+}
+
+export async function adminOverrideStaffCheckin(formData: FormData) {
+  const profile=await requireRole(["admin"]);
+  const admin=createAdminClient();
+  const scheduleId=text(formData.get("schedule_id")), checkInAt=text(formData.get("check_in_at")), checkOutAt=text(formData.get("check_out_at")), reason=text(formData.get("reason"));
+  if(!scheduleId||!checkInAt||!reason) go("/workforce",undefined,"Thiếu thông tin override nhân sự.");
+  if(checkOutAt&&new Date(checkOutAt).getTime()<new Date(checkInAt).getTime()) go("/workforce",undefined,"Check-out không thể trước Check-in.");
+  const {data:schedule,error:scheduleError}=await admin.from("staff_work_schedules").select("id,user_id,work_date,start_time").eq("id",scheduleId).single();
+  if(scheduleError||!schedule) go("/workforce",undefined,scheduleError?.message||"Không tìm thấy ca làm.");
+  const scheduledStart=new Date(`${schedule.work_date}T${String(schedule.start_time).slice(0,8)}+07:00`);
+  const lateMinutes=Math.max(0,Math.round((new Date(checkInAt).getTime()-scheduledStart.getTime())/60000));
+  const {error}=await admin.from("staff_work_logs").upsert({
+    schedule_id:scheduleId,user_id:schedule.user_id,check_in_at:new Date(checkInAt).toISOString(),
+    check_out_at:checkOutAt?new Date(checkOutAt).toISOString():null,late_minutes:lateMinutes,status:"Adjusted",
+    adjustment_note:reason,adjusted_by:profile.id,updated_at:new Date().toISOString()
+  },{onConflict:"schedule_id"});
+  if(error) go("/workforce",undefined,error.message);
+  revalidatePath("/workforce"); revalidatePath("/dashboard");
+  go("/workforce","Admin đã override Check-in/Check-out của nhân sự.");
 }
 
 export async function staffWorkCheckIn(formData: FormData) {

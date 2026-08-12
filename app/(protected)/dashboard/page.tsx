@@ -51,18 +51,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const today = vietnamTodayString();
 
   if (profile.role === "admin" || profile.role === "academic_manager") {
-    const [students, activeClasses, waitingStudents, weekSessions, pendingFeedback, observations] = await Promise.all([
+    const [students, activeClasses, waitingStudents, weekSessions, pendingFeedback, observations, classTeacherLinks, milestoneSessions] = await Promise.all([
       supabase.from("students").select("id", { count: "exact", head: true }).is("archived_at", null),
-      supabase.from("classes").select("id", { count: "exact", head: true }).eq("status", "Active").is("archived_at", null),
+      supabase.from("classes").select("id,code,name,status").eq("status", "Active").is("archived_at", null),
       supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "Waiting for class").is("archived_at", null),
       supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(role,teachers(id,full_name))").gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).is("archived_at", null).order("scheduled_date").order("start_time"),
       supabase.from("progress_feedback").select("id,enrollment_id,milestone,status", { count: "exact" }).eq("status", "Submitted").limit(8),
-      supabase.from("teacher_observations").select("id,total_score,status,teachers(full_name),created_at").order("created_at", { ascending: false }).limit(6)
+      supabase.from("teacher_observations").select("id,total_score,status,teachers(full_name),created_at").order("created_at", { ascending: false }).limit(6),
+      supabase.from("class_teachers").select("class_id,role").eq("role","Main teacher"),
+      supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,status,classes(code,name)").in("session_no",[18,36]).gte("scheduled_date",today).neq("status","Cancelled").is("archived_at",null).order("scheduled_date").limit(12)
     ]);
     const todaySessions = (weekSessions.data || []).filter((item: any) => item.scheduled_date === today);
     const upcoming = (weekSessions.data || []).filter((item: any) => item.scheduled_date >= today && !String(item.status).toLowerCase().includes("cancel"));
     const nextSession = upcoming[0];
     const nextClass = joined(nextSession?.classes);
+    const mainTeacherClassIds=new Set((classTeacherLinks.data||[]).map((x:any)=>x.class_id));
+    const weekScheduledClassIds=new Set((weekSessions.data||[]).filter((x:any)=>!String(x.status).toLowerCase().includes("cancel")).map((x:any)=>x.class_id));
+    const classesNeedingSchedule=(activeClasses.data||[]).filter((x:any)=>!mainTeacherClassIds.has(x.id)||!weekScheduledClassIds.has(x.id));
     let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0 };
     let adminTeacherRates: any[] = [];
     let adminPayrollStatements: any[] = [];
@@ -113,7 +118,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Học viên" value={students.count || 0} note={`${waitingStudents.count || 0} đang chờ xếp lớp`} />
-        <MetricCard label="Lớp đang hoạt động" value={activeClasses.count || 0} tone="green" />
+        <MetricCard label="Lớp đang hoạt động" value={(activeClasses.data || []).length} tone="green" />
         <MetricCard label="Buổi tuần này" value={(weekSessions.data || []).length} note={`${formatDate(weekStart)} – ${formatDate(weekEnd)}`} tone="yellow" />
         <MetricCard label="Feedback chờ duyệt" value={pendingFeedback.count || 0} tone={(pendingFeedback.count || 0) > 0 ? "red" : "neutral"} />
       </div>
@@ -129,6 +134,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
         </Panel>
       </div>
+      {classesNeedingSchedule.length?<Panel className="section-gap" title="⚠ Lớp cần xếp GV / lịch" description="Lớp Active nhưng thiếu GV chính hoặc chưa có session trong tuần hiện tại." action={<Link className="text-link" href="/class-planner">Mở Xếp lớp & GV →</Link>}><div className="warning-chip-list">{classesNeedingSchedule.slice(0,12).map((row:any)=><span key={row.id}>{row.code}</span>)}</div></Panel>:null}
+      {(milestoneSessions.data||[]).length?<Panel className="section-gap" title="Mốc Midterm / Final sắp tới" description="Buổi 18 = Midterm · Buổi 36 = Final"><div className="milestone-warning-grid">{(milestoneSessions.data||[]).map((row:any)=>{const c=joined(row.classes);return <div className={`milestone-warning-card ${Number(row.session_no)===18?"mid":"final"}`} key={row.id}><span>{Number(row.session_no)===18?"MIDTERM":"FINAL"}</span><strong>{c?.code} · Buổi {row.session_no}</strong><small>{formatDate(row.scheduled_date)} · {row.start_time?.slice(0,5)}</small></div>})}</div></Panel>:null}
       {profile.role === "admin" ? <Panel className="section-gap" title="Tài chính tháng này" description="Thu, chi, công nợ và cảnh báo tái phí" action={<Link className="text-link" href="/finance/reports">Mở báo cáo →</Link>}>
         <div className="metrics-grid compact-metrics">
           <MetricCard label="Đã thu" value={formatMoney(adminFinance.revenue)} tone="green" />
@@ -238,12 +245,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const next14Date = vietnamTodayDate();
     next14Date.setUTCDate(next14Date.getUTCDate() + 14);
     const next14 = dateOnlyString(next14Date);
-    const [students, waitingStudents, accounts, renewals, followups] = await Promise.all([
+    const [students, waitingStudents, accounts, renewals, followups, enrollmentRenewals] = await Promise.all([
       supabase.from("students").select("id", { count: "exact", head: true }).is("archived_at", null),
       supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "Waiting for class").is("archived_at", null),
       supabase.from("tuition_accounts").select("id,balance_amount,renewal_due_date,status,students(full_name,code)").order("renewal_due_date").limit(20),
       supabase.from("tuition_accounts").select("id", { count: "exact", head: true }).gte("renewal_due_date", today).lte("renewal_due_date", next14),
-      supabase.from("renewal_followups").select("id,due_at,status,note,tuition_accounts(students(full_name,code))").eq("status", "Pending").order("due_at").limit(12)
+      supabase.from("renewal_followups").select("id,due_at,status,note,tuition_accounts(students(full_name,code))").eq("status", "Pending").order("due_at").limit(12),
+      supabase.from("enrollments").select("id,start_date,end_date,status,students(id,code,full_name,phone),classes(code,name)").eq("status","Active").is("archived_at",null).not("end_date","is",null).lte("end_date",dateOnlyString(new Date(vietnamTodayDate().getTime()+30*86400000))).order("end_date").limit(30)
     ]);
     const outstanding = (accounts.data || []).reduce((sum: number, x: any) => sum + Number(x.balance_amount || 0), 0);
     const dueToday = (followups.data || []).filter((item: any) => String(item.due_at || "").slice(0,10) <= today);
@@ -254,10 +262,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <DashboardHero
         label={`${dueToday.length} việc đến hạn hôm nay`}
         title={dueToday.length ? "Ưu tiên liên hệ các học viên đến hạn" : "Hôm nay không có follow-up quá hạn"}
-        description={`${renewals.count || 0} tài khoản dự kiến tái phí trong 14 ngày tới.`}
+        description={`${(enrollmentRenewals.data||[]).length} học viên sắp End date trong 30 ngày · ${renewals.count || 0} tài khoản học phí có renewal_due_date trong 14 ngày.`}
         meta={<><span>{students.count || 0} hồ sơ học viên</span><span>{waitingStudents.count || 0} HV chờ xếp lớp</span><span>{formatMoney(outstanding)} công nợ đang theo dõi</span></>}
         actions={<><Link className="button button-yellow" href="/finance">Mở danh sách tái phí</Link><Link className="button hero-secondary" href="/students">Hồ sơ học viên</Link></>}
       />
+      {(enrollmentRenewals.data||[]).length?<Panel className="section-gap" title="⚠ Cảnh báo tái phí theo End date" description="CSKH chủ động liên hệ trước khi khóa học kết thúc. Cảnh báo trước 30 ngày."><div className="renewal-watch-list">{(enrollmentRenewals.data||[]).map((row:any)=>{const st=joined(row.students);const cl=joined(row.classes);const days=Math.ceil((new Date(`${row.end_date}T00:00:00`).getTime()-Date.now())/86400000);return <Link href={`/students/${st?.id}`} className={`renewal-watch-row ${days<0?"overdue":days<=7?"urgent":""}`} key={row.id}><div><strong>{st?.code} · {st?.full_name}</strong><span>{cl?.code} · End {formatDate(row.end_date)}</span></div><b>{days<0?`Quá ${Math.abs(days)} ngày`:days===0?"Hôm nay":`Còn ${days} ngày`}</b></Link>})}</div></Panel>:null}
       <div className="quick-actions-grid">
         <QuickAction href="/workforce" icon="CC" title="Lịch làm & chấm công" description="Đăng ký ca, Check-in/Check-out và giờ công" />
         <QuickAction href="/students" icon="+" title="Thêm học viên" description="Tạo hồ sơ và nhập lịch rảnh" />
