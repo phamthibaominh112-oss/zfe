@@ -1214,3 +1214,40 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .staff-date-filter input{width:100%}
   .staff-log-actions{justify-content:stretch;flex-direction:column}.staff-log-actions button{width:100%}
 }
+
+
+/* v1.4.9 — optional session Observer */
+.session-staff-lines .session-observer.assigned{
+  color:#7a3dd1;
+  font-weight:800;
+}
+.session-staff-lines .session-observer.empty{
+  color:#98a2b3;
+}
+.session-observer-quick{
+  margin-top:8px;
+  border:1px solid #ded4f8;
+  border-radius:11px;
+  background:#fbf9ff;
+  overflow:hidden;
+}
+.session-observer-quick>summary{
+  cursor:pointer;
+  list-style:none;
+  padding:8px 10px;
+  color:#6c3cc5;
+  font-size:11px;
+  font-weight:900;
+}
+.session-observer-quick>summary::-webkit-details-marker{display:none}
+.session-observer-quick[open]>summary{border-bottom:1px solid #e9e1fb}
+.session-observer-form{
+  display:grid;
+  gap:9px;
+  padding:10px;
+}
+.session-observer-form .form-span-2{grid-column:auto}
+.session-observer-help{
+  color:#667085;
+  line-height:1.35;
+}

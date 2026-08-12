@@ -404,6 +404,72 @@ export async function deleteTeacherAvailability(formData: FormData) {
   go(returnPath, "Đã xóa lịch rảnh giáo viên.");
 }
 
+export async function updateSessionObserver(formData: FormData) {
+  const profile = await requireRole(["admin", "academic_manager"]);
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const sessionId = text(formData.get("session_id"));
+  const observerUserId = text(formData.get("observer_user_id"));
+  const note = text(formData.get("observer_note"));
+
+  if (!sessionId) go("/schedule", undefined, "Không xác định được buổi học.");
+
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("id,class_id,session_no")
+    .eq("id", sessionId)
+    .is("archived_at", null)
+    .single();
+
+  if (sessionError || !session) {
+    go("/schedule", undefined, sessionError?.message || "Không tìm thấy buổi học.");
+  }
+
+  // Blank observer means remove the optional Observer assignment.
+  if (!observerUserId) {
+    const { error: deleteError } = await supabase
+      .from("session_observers")
+      .delete()
+      .eq("session_id", sessionId);
+    if (deleteError) go("/schedule", undefined, deleteError.message);
+
+    revalidatePath("/schedule");
+    revalidatePath(`/classes/${session.class_id}`);
+    revalidatePath("/dashboard");
+    go("/schedule", `Đã gỡ Observer khỏi Buổi ${session.session_no}.`);
+  }
+
+  const { data: observerProfile, error: observerError } = await admin
+    .from("profiles")
+    .select("id,full_name,role,is_active")
+    .eq("id", observerUserId)
+    .maybeSingle();
+
+  if (observerError || !observerProfile) {
+    go("/schedule", undefined, observerError?.message || "Không tìm thấy Observer.");
+  }
+  if (!observerProfile.is_active) go("/schedule", undefined, "Observer đang bị khóa tài khoản.");
+  if (!["admin","academic_manager"].includes(String(observerProfile.role))) {
+    go("/schedule", undefined, "Observer hiện chỉ chọn từ Admin / Academic.");
+  }
+
+  const { error } = await supabase.from("session_observers").upsert({
+    session_id: sessionId,
+    observer_user_id: observerUserId,
+    observer_name: observerProfile.full_name,
+    note: note || null,
+    assigned_by: profile.id,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "session_id" });
+
+  if (error) go("/schedule", undefined, error.message);
+
+  revalidatePath("/schedule");
+  revalidatePath(`/classes/${session.class_id}`);
+  revalidatePath("/dashboard");
+  go("/schedule", `Đã phân Observer ${observerProfile.full_name} cho Buổi ${session.session_no}.`);
+}
+
 export async function updateSessionTeachingTeam(formData: FormData) {
   await requireRole(["admin", "academic_manager"]);
   const supabase = await createClient();

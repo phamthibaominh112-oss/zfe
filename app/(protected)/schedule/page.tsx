@@ -1,10 +1,11 @@
-import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, duplicatePreviousWeekSchedule, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
+import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, duplicatePreviousWeekSchedule, updateSessionObserver, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
 import { formatDate, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayString, vietnamWeek } from "@/lib/vietnam-date";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const DAY_LABELS = ["Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy","Chủ nhật"];
 const UNASSIGNED_TEACHER = "__unassigned__";
@@ -77,7 +78,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     : { data: null as any };
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
-  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings] = await Promise.all([
+  const admin = canManage ? createAdminClient() : null;
+  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings, observerAssignments, observerCandidates] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
@@ -85,7 +87,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     canManage ? supabase.from("classes").select("id,code,name,mode,status,capacity,programs(name),levels(name)").in("status",["Draft","Waiting","Ready","Active","Paused"]).is("archived_at",null).order("code") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("students").select("id,code,full_name,status").is("archived_at",null).order("full_name") : Promise.resolve({data:[] as any[]}),
     canManage ? supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name)").eq("status","Active").is("archived_at",null) : Promise.resolve({data:[] as any[]}),
-    profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("placement_speaking_bookings").select("id,teacher_id,scheduled_start,duration_minutes,status,placement_tests(id,status,students(id,code,full_name)),teachers(id,code,full_name)").gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).order("scheduled_start")
+    profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("placement_speaking_bookings").select("id,teacher_id,scheduled_start,duration_minutes,status,placement_tests(id,status,students(id,code,full_name)),teachers(id,code,full_name)").gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).order("scheduled_start"),
+    profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("session_observers").select("id,session_id,observer_user_id,observer_name,note"),
+    canManage && admin ? admin.from("profiles").select("id,full_name,role,is_active").in("role",["admin","academic_manager"]).eq("is_active",true).order("full_name") : Promise.resolve({data:[] as any[]})
   ]);
 
   const selectedClassId = canManage ? String(params.class || "") : "";
@@ -127,6 +131,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       overlapStart: teacherSlot.start_time > classSlot.start ? teacherSlot.start_time : classSlot.start,
       overlapEnd: teacherSlot.end_time < classSlot.end ? teacherSlot.end_time : classSlot.end
     })));
+
+  const observerBySession = new Map<string,any>((observerAssignments.data||[]).map((row:any)=>[row.session_id,row]));
+  const observerOptions = (observerCandidates.data||[]).map((row:any)=>({
+    value: String(row.id),
+    label: `${row.full_name} · ${row.role === "academic_manager" ? "Academic" : "Admin"}`
+  }));
 
   const allSessions = sessions.data || [];
   const ownTeacherSessions = profile.role === "teacher"
@@ -247,12 +257,23 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
               const assistantTeacherLink = teacherLinks.find((x:any)=>x.role === "Assistant");
               const mainTeacher = joined(mainTeacherLink?.teachers);
               const assistantTeacher = joined(assistantTeacherLink?.teachers);
+              const observer = observerBySession.get(item.id);
               const teacherText = mainTeacher ? `GV chính: ${mainTeacher.full_name}` : "Chưa phân GV chính";
               return <article className={`session-card ${item.mode === "Offline" ? "offline" : ""}`} key={item.id}>
                 <div className="session-time-row"><strong>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</strong><span>{item.duration_hours}h</span></div>
                 <h3>{classRow?.code || "Lớp"} · {sessionDisplayLabel(item.status,item.session_no)}</h3>
                 <p>{classRow?.name || item.topic || "Buổi học"}</p>
-                <div className="session-staff-lines"><small>{teacherText}</small><small className={assistantTeacher ? "session-ta assigned" : "session-ta empty"}>TA: {assistantTeacher?.full_name || "Chưa phân TA"}</small></div>
+                <div className="session-staff-lines"><small>{teacherText}</small><small className={assistantTeacher ? "session-ta assigned" : "session-ta empty"}>TA: {assistantTeacher?.full_name || "Chưa phân TA"}</small>{observer ? <small className="session-observer assigned">Observer: {observer.observer_name}</small> : canManage ? <small className="session-observer empty">Observer: Chưa phân</small> : null}</div>
+                {canManage ? <details className="session-observer-quick">
+                  <summary>👁 Phân Observer</summary>
+                  <form action={updateSessionObserver} className="session-observer-form">
+                    <input type="hidden" name="session_id" value={item.id}/>
+                    <SelectField label="Observer (optional)" name="observer_user_id" defaultValue={observer?.observer_user_id || ""} options={observerOptions}/>
+                    <TextAreaField label="Ghi chú observation" name="observer_note" defaultValue={observer?.note || ""} placeholder="Ví dụ: Observe classroom management / interaction / lesson delivery..."/>
+                    <button className="button button-primary">Lưu Observer</button>
+                    {observer ? <small className="session-observer-help">Chọn “Chọn...” rồi Lưu để gỡ Observer khỏi buổi này.</small> : <small className="session-observer-help">Observer chỉ gắn vào buổi này, không tự áp dụng cho cả lớp.</small>}
+                  </form>
+                </details> : null}
                 {canManage ? <details className="session-team-quick">
                   <summary>👥 Quản lý GV + Co-teacher/TA</summary>
                   <form action={updateSessionTeachingTeam} className="session-team-quick-form">
