@@ -1131,3 +1131,86 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .assignment-material-actions{justify-content:flex-start}
   .assignment-download-button{width:100%;text-align:center}
 }
+
+
+/* v1.4.7 — Restricted Staff Operations + Daily Work Log */
+.staff-ops-access-banner{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:12px 15px;margin:0 0 16px;border:1px solid #cbd7ff;border-radius:13px;
+  background:#f4f7ff;color:#344054;font-size:12px
+}
+.staff-ops-access-banner strong{color:#1834e8}
+.staff-ops-access-banner.admin{background:#fff9e8;border-color:#f0d48a}
+.staff-ops-access-banner.admin strong{color:#8a6500}
+.staff-role-checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.staff-role-checklist>div{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.staff-role-checklist span{display:grid;place-items:center;min-width:30px;height:30px;border-radius:9px;background:#eef2ff;color:#1834e8;font-size:10px;font-weight:900}
+.staff-role-checklist p{margin:4px 0 0;font-size:12px}
+.staff-date-filter{display:flex;align-items:end;gap:10px;margin-bottom:14px}
+.staff-date-filter label{display:grid;gap:5px;font-size:11px;font-weight:800;color:#475467}
+.staff-date-filter input{min-width:190px;padding:9px 10px;border:1px solid var(--line);border-radius:10px}
+.staff-clock-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.staff-clock-summary>div{padding:11px 12px;border-radius:12px;background:#f7f9fc;border:1px solid var(--line);display:grid;gap:3px}
+.staff-clock-summary span{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}
+.staff-clock-summary strong{font-size:15px}
+.staff-manager-feedback{padding:12px 14px;border-radius:12px;background:#fff8d8;border:1px solid #f4dea2;margin-bottom:14px}
+.staff-manager-feedback p{margin:5px 0 0;white-space:pre-wrap}
+.staff-daily-log-form{display:grid;gap:14px}
+.staff-outcome-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.staff-outcome-grid .form-group,.staff-log-two-col .form-group{grid-column:auto}
+.staff-log-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.staff-daily-log-form textarea{min-height:120px}
+.staff-log-actions{display:flex;justify-content:flex-end;gap:9px;padding-top:4px}
+.staff-log-history{display:grid;gap:8px}
+.staff-log-history>a{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;text-decoration:none;color:inherit}
+.staff-log-history>a>div{display:flex;align-items:center;gap:9px}
+.staff-log-history>a>div:first-child{display:grid;gap:2px}
+.staff-log-history span{font-size:11px;color:var(--muted)}
+.staff-manager-pill{display:inline-flex;align-items:center;padding:5px 8px;border-radius:999px;font-size:10px;font-weight:900;background:#edf2ff;color:#2455d6}
+.staff-manager-pill.green{background:#e9f8ef;color:#16834b}
+.staff-manager-pill.red{background:#ffeded;color:#b42318}
+.staff-handbook-panel .handbook-frame{min-height:850px}
+.staff-log-manager-list{display:grid;gap:14px}
+.staff-log-manager-card{border:1px solid var(--line);border-radius:15px;padding:14px;background:#fff}
+.staff-log-manager-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.staff-log-manager-head>div:first-child{display:grid;gap:3px}
+.staff-log-manager-head span{font-size:11px;color:var(--muted)}
+.staff-log-statuses{display:flex;align-items:center;gap:7px}
+.staff-log-clock{display:flex;gap:15px;flex-wrap:wrap;margin:10px 0;padding:8px 10px;border-radius:10px;background:#f7f9fc;font-size:11px;color:var(--muted)}
+.staff-log-clock b{color:#344054}
+.staff-log-outcomes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.staff-log-outcomes>div,.staff-log-detail-grid>div{padding:10px 11px;border:1px solid var(--line);border-radius:11px}
+.staff-log-outcomes small,.staff-log-detail-grid small{display:block;color:#1834e8;font-size:10px;font-weight:900;text-transform:uppercase}
+.staff-log-outcomes p,.staff-log-detail-grid p{white-space:pre-wrap;margin:5px 0 0;font-size:12px}
+.staff-log-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+.staff-manager-review-form{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:10px;align-items:end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.staff-manager-review-form .form-group{grid-column:auto;margin:0}
+.staff-manager-review-form textarea{min-height:72px}
+.staff-accountability-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:end}
+.staff-accountability-form .form-group{grid-column:auto}
+.staff-accountability-form .form-group:nth-of-type(n+5){grid-column:span 2}
+.staff-accountability-form button{grid-column:4;justify-self:end}
+.accountability-db-list{display:grid;gap:10px;margin-top:18px}
+.accountability-db-card{border:1px solid var(--line);border-left:4px solid #b8c1d1;border-radius:12px;padding:12px}
+.accountability-db-card.level-2{border-left-color:#e0a500;background:#fffdf5}
+.accountability-db-card.level-3{border-left-color:#d92d20;background:#fff7f7}
+.accountability-db-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.accountability-db-head>div{display:grid;gap:3px}.accountability-db-head span{font-size:11px;color:var(--muted)}
+.accountability-db-card p{font-size:12px;margin:8px 0}
+.staff-accountability-update{display:grid;grid-template-columns:180px 180px repeat(2,minmax(0,1fr)) auto;gap:9px;align-items:end;padding-top:10px;border-top:1px solid var(--line)}
+.staff-accountability-update .form-group{grid-column:auto;margin:0}.staff-accountability-update textarea{min-height:66px}
+@media(max-width:1000px){
+  .staff-clock-summary,.staff-outcome-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .staff-manager-review-form,.staff-accountability-update{grid-template-columns:1fr 1fr}
+  .staff-manager-review-form button,.staff-accountability-update button{justify-self:start}
+  .staff-accountability-form{grid-template-columns:1fr 1fr}
+  .staff-accountability-form .form-group:nth-of-type(n+5){grid-column:span 1}
+  .staff-accountability-form button{grid-column:auto}
+}
+@media(max-width:680px){
+  .staff-ops-access-banner,.staff-log-manager-head,.staff-log-history>a{align-items:flex-start;flex-direction:column}
+  .staff-role-checklist,.staff-clock-summary,.staff-outcome-grid,.staff-log-two-col,.staff-log-outcomes,.staff-log-detail-grid,.staff-manager-review-form,.staff-accountability-form,.staff-accountability-update{grid-template-columns:1fr}
+  .staff-date-filter{align-items:stretch;flex-direction:column}
+  .staff-date-filter input{width:100%}
+  .staff-log-actions{justify-content:stretch;flex-direction:column}.staff-log-actions button{width:100%}
+}

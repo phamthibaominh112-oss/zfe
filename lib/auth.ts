@@ -15,7 +15,11 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     .single();
 
   if (error || !data || !data.is_active) return null;
-  return data as Profile;
+  const claims = claimsData?.claims as Record<string, unknown> | undefined;
+  return {
+    ...data,
+    email: typeof claims?.email === "string" ? claims.email : null
+  } as Profile;
 }
 
 export async function requireProfile(): Promise<Profile> {

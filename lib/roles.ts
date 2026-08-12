@@ -11,6 +11,7 @@ export type AppRole = (typeof ROLES)[number];
 export type Profile = {
   id: string;
   full_name: string;
+  email: string | null;
   role: AppRole;
   is_active: boolean;
 };

@@ -99,7 +99,17 @@ const EMBEDDED_HANDBOOK_CSS = `
 }
 `;
 
-export function HandbookViewer({ html }: { html: string }) {
+export function HandbookViewer({
+  html,
+  title = "ZE CenterOS Master Training Handbook",
+  subtitle = "Academic · CSKH · Admin · Placement Test SOP · End-to-End Learner Journey",
+  frameTitle = "ZE CenterOS Master Training Handbook"
+}: {
+  html: string;
+  title?: string;
+  subtitle?: string;
+  frameTitle?: string;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -173,8 +183,8 @@ export function HandbookViewer({ html }: { html: string }) {
     <div className="handbook-viewer" ref={viewerRef}>
       <div className="handbook-viewer-toolbar">
         <div>
-          <strong>ZE CenterOS Master Training Handbook</strong>
-          <span>Academic · CSKH · Admin · Placement Test SOP · End-to-End Learner Journey</span>
+          <strong>{title}</strong>
+          <span>{subtitle}</span>
         </div>
         <div className="handbook-toolbar-actions">
           <button className="button button-secondary button-small" type="button" onClick={jumpTop} disabled={!ready}>↑ Đầu tài liệu</button>
@@ -187,7 +197,7 @@ export function HandbookViewer({ html }: { html: string }) {
         <iframe
           ref={iframeRef}
           className="handbook-frame"
-          title="ZE CenterOS Master Training Handbook"
+          title={frameTitle}
           src="about:blank"
           sandbox="allow-same-origin allow-scripts allow-modals"
           referrerPolicy="no-referrer"

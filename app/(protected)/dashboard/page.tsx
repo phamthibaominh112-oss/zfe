@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatMoney, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/vietnam-date";
 import type { CSSProperties, ReactNode } from "react";
+import { canAccessStaffOps } from "@/lib/staff-ops";
 
 function weekRange() {
   const now = vietnamTodayDate();
@@ -115,6 +116,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/students" icon="HV" title="Xử lý học viên" description="Hồ sơ, lịch rảnh và xếp lớp" tone="yellow" />
         <QuickAction href="/academic" icon="✓" title="Duyệt học thuật" description="Attendance, điểm và feedback" tone="green" />
         <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Quy trình, Placement Test và hướng dẫn vận hành" />
+        {canAccessStaffOps(profile) ? <QuickAction href="/staff-ops" icon="OPS" title={profile.role === "admin" ? "Staff Ops Control" : "Daily Work Log"} description={profile.role === "admin" ? "Review Khang · Thịnh · Mai" : "Handbook + log cuối ca"} tone="green" /> : null}
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Học viên" value={students.count || 0} note={`${waitingStudents.count || 0} đang chờ xếp lớp`} />
@@ -273,6 +275,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/finance" icon="₫" title="Ghi nhận thanh toán" description="Cập nhật tiền đóng và công nợ" tone="yellow" />
         <QuickAction href="/finance" icon="↻" title="Tái phí" description="Theo dõi và tạo follow-up" tone="green" />
         <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Xem lại quy trình và hướng dẫn thao tác" />
+        {canAccessStaffOps(profile) ? <QuickAction href="/staff-ops" icon="OPS" title="Daily Work Log" description="Handbook + log cuối ca" tone="green" /> : null}
       </div>
       <div className="metrics-grid compact-metrics">
         <MetricCard label="Hồ sơ học viên" value={students.count || 0} />

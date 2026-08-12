@@ -5,11 +5,15 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { NAV_ITEMS, ROLE_LABELS, type Profile } from "@/lib/roles";
 import { signOut } from "@/app/auth-actions";
+import { canAccessStaffOps } from "@/lib/staff-ops";
 
 export function AppShell({ profile, unreadNotifications, children }: { profile: Profile; unreadNotifications: number; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const visible = NAV_ITEMS[profile.role];
+  const visible = [
+    ...NAV_ITEMS[profile.role],
+    ...(canAccessStaffOps(profile) ? [{ href: "/staff-ops", label: profile.role === "admin" ? "Staff Ops Control" : "Staff Operations", short: "OPS" }] : [])
+  ];
   const activeItem = visible.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const todayLabel = new Intl.DateTimeFormat("vi-VN", {
     weekday: "long",

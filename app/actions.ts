@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireProfile, requireRole } from "@/lib/auth";
 import { text, toNumber } from "@/lib/format";
 import type { AppRole } from "@/lib/roles";
+import { canAccessStaffOps, staffOpsPerson, STAFF_OPS_PEOPLE } from "@/lib/staff-ops";
 
 function go(path: string, message?: string, error?: string): never {
   const params = new URLSearchParams();
@@ -1973,3 +1974,107 @@ export async function generateTeacherKpiMonth(formData: FormData) {
   revalidatePath("/workforce/kpi");
   go(`/workforce/kpi?month=${month.slice(0, 7)}`, `Đã cập nhật KPI cho ${Number(data || 0)} giáo viên.`);
 }
+
+
+export async function saveStaffDailyLog(formData: FormData) {
+  const profile = await requireProfile();
+  if (!canAccessStaffOps(profile) || profile.role === "admin") go("/dashboard", undefined, "Bạn không có quyền sử dụng Staff Daily Work Log.");
+  const person = staffOpsPerson(profile.email);
+  if (!person) go("/dashboard", undefined, "Tài khoản này không nằm trong Staff Operations team.");
+
+  const supabase = await createClient();
+  const workDate = text(formData.get("work_date"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) go("/staff-ops", undefined, "Ngày làm việc không hợp lệ.");
+
+  const mode = text(formData.get("submit_mode")) === "submit" ? "Submitted" : "Draft";
+  const payload = {
+    user_id: profile.id,
+    staff_email: person.email,
+    staff_name: person.name,
+    work_date: workDate,
+    check_in_actual: text(formData.get("check_in_actual")) || null,
+    check_out_actual: text(formData.get("check_out_actual")) || null,
+    outcome_1: text(formData.get("outcome_1")) || null,
+    outcome_2: text(formData.get("outcome_2")) || null,
+    outcome_3: text(formData.get("outcome_3")) || null,
+    completed_today: text(formData.get("completed_today")) || null,
+    open_risks_handover: text(formData.get("open_risks_handover")) || null,
+    delay_sla_breach: text(formData.get("delay_sla_breach")) || null,
+    tomorrow_priorities: text(formData.get("tomorrow_priorities")) || null,
+    status: mode,
+    submitted_at: mode === "Submitted" ? new Date().toISOString() : null,
+    manager_status: "Pending"
+  };
+
+  const { error } = await supabase.from("staff_daily_logs").upsert(payload, { onConflict: "user_id,work_date" });
+  if (error) go(`/staff-ops?date=${workDate}`, undefined, error.message);
+
+  revalidatePath("/staff-ops");
+  go(`/staff-ops?date=${workDate}`, mode === "Submitted" ? "Đã nộp Daily Work Log. Admin có thể review ngay." : "Đã lưu nháp Daily Work Log.");
+}
+
+export async function adminReviewStaffDailyLog(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+  const logId = text(formData.get("log_id"));
+  const managerStatus = text(formData.get("manager_status"));
+  if (!["Reviewed","Needs follow-up","Pending"].includes(managerStatus)) go("/staff-ops?view=manager", undefined, "Trạng thái review không hợp lệ.");
+
+  const { error } = await supabase.from("staff_daily_logs").update({
+    manager_status: managerStatus,
+    manager_note: text(formData.get("manager_note")) || null,
+    manager_reviewed_by: profile.id,
+    manager_reviewed_at: new Date().toISOString()
+  }).eq("id", logId);
+  if (error) go("/staff-ops?view=manager", undefined, error.message);
+  revalidatePath("/staff-ops");
+  go("/staff-ops?view=manager", "Đã cập nhật Manager Review.");
+}
+
+export async function adminCreateAccountabilityLog(formData: FormData) {
+  const profile = await requireRole(["admin"]);
+  const admin = createAdminClient();
+  const staffEmail = text(formData.get("staff_email")).toLowerCase();
+  const person = STAFF_OPS_PEOPLE.find((x) => x.email === staffEmail);
+  if (!person) go("/staff-ops?view=manager", undefined, "Nhân sự không hợp lệ.");
+
+  let staffUserId: string | null = null;
+  const { data: authUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  staffUserId = authUsers?.users?.find((u: { id: string; email?: string | null }) => String(u.email || "").toLowerCase() === staffEmail)?.id || null;
+
+  const { error } = await admin.from("staff_accountability_logs").insert({
+    incident_date: text(formData.get("incident_date")) || new Date().toISOString().slice(0,10),
+    staff_user_id: staffUserId,
+    staff_email: person.email,
+    staff_name: person.name,
+    incident: text(formData.get("incident")),
+    severity: text(formData.get("severity")),
+    impact: text(formData.get("impact")) || null,
+    corrective_action: text(formData.get("corrective_action")) || null,
+    deadline: text(formData.get("deadline")) || null,
+    status: "Open",
+    manager_note: text(formData.get("manager_note")) || null,
+    created_by: profile.id
+  });
+  if (error) go("/staff-ops?view=manager", undefined, error.message);
+  revalidatePath("/staff-ops");
+  go("/staff-ops?view=manager", "Đã ghi Accountability Log.");
+}
+
+export async function adminUpdateAccountabilityLog(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase = await createClient();
+  const logId = text(formData.get("accountability_id"));
+  const status = text(formData.get("status"));
+  if (!["Open","Monitoring","Closed"].includes(status)) go("/staff-ops?view=manager", undefined, "Trạng thái không hợp lệ.");
+  const { error } = await supabase.from("staff_accountability_logs").update({
+    status,
+    corrective_action: text(formData.get("corrective_action")) || null,
+    deadline: text(formData.get("deadline")) || null,
+    manager_note: text(formData.get("manager_note")) || null
+  }).eq("id", logId);
+  if (error) go("/staff-ops?view=manager", undefined, error.message);
+  revalidatePath("/staff-ops");
+  go("/staff-ops?view=manager", "Đã cập nhật Accountability Log.");
+}
+
