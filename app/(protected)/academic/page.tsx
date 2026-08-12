@@ -22,7 +22,10 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
     supabase.from("attendance").select("id,session_id,student_id,status,late_minutes,reason,marked_at").gte("marked_at",new Date(Date.now()-7*86400000).toISOString())
   ]);
 
-  const classOptions = Array.from(new Map((enrollments.data||[]).map((x:any)=>[x.class_id,{value:x.class_id,label:`${x.classes?.code} · ${x.classes?.name}`}])).values()) as Array<{value:string,label:string}>;
+  const classOptions = Array.from(new Map([
+    ...(enrollments.data||[]).map((x:any)=>[String(x.class_id),{value:String(x.class_id),label:`${x.classes?.code} · ${x.classes?.name}`}]),
+    ...(sessions.data||[]).filter((x:any)=>x.class_id).map((x:any)=>[String(x.class_id),{value:String(x.class_id),label:`${x.classes?.code} · ${x.classes?.name}`}])
+  ]).values()) as Array<{value:string,label:string}>;
   const sessionOptions = (sessions.data||[]).map((x:any)=>({value:x.id,label:`${x.classes?.code} · ${sessionDisplayLabel(x.status,x.session_no)} · ${formatDate(x.scheduled_date)} ${x.start_time?.slice(0,5)}`}));
   const enrollmentOptions = (enrollments.data||[]).map((x:any)=>({value:x.id,label:`${x.classes?.code} · ${x.students?.code} · ${x.students?.full_name}`}));
   const studentOptions = (enrollments.data||[]).map((x:any)=>({value:x.student_id,label:`${x.students?.code} · ${x.students?.full_name}`}));
@@ -54,8 +57,8 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
       <div className="form-actions"><button className="button button-primary">Lưu homework</button></div>
     </FormGrid></form></FormDetails>
     <FormDetails title="Tạo assignment"><form action={createAssignment}><FormGrid>
-      <SelectField label="Lớp" name="class_id" required options={classOptions}/><SelectField label="Session (optional)" name="session_id" options={sessionOptions}/>
-      <Field label="Tiêu đề" name="title" required/><Field label="Deadline" name="due_at" type="datetime-local"/><Field label="Điểm tối đa" name="max_score" type="number" defaultValue={100}/><TextAreaField label="Đề bài / Hướng dẫn" name="instructions" required/>
+      <SelectField label="Lớp (nếu không chọn Session)" name="class_id" options={classOptions}/><SelectField label="Session (optional)" name="session_id" options={sessionOptions}/>
+      <div className="assignment-class-helper">Nếu chọn Session, hệ thống tự lấy đúng lớp của session đó. Chỉ chọn Lớp khi giao bài chung không gắn buổi.</div><Field label="Tiêu đề" name="title" required/><Field label="Deadline" name="due_at" type="datetime-local"/><Field label="Điểm tối đa" name="max_score" type="number" defaultValue={100}/><TextAreaField label="Đề bài / Hướng dẫn" name="instructions" required/>
       <label className="form-group assignment-upload-field"><span>File đề / tài liệu cho HV</span><input className="input" type="file" name="material_file" accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg,.zip"/><small>Không bắt buộc · tối đa 20MB · PDF/Word/PPT/Excel/ảnh/ZIP</small></label>
       <label className="form-group"><span>Publish ngay</span><input name="publish" type="checkbox" defaultChecked/></label><div className="form-actions"><button className="button button-primary">Tạo assignment</button></div>
     </FormGrid></form></FormDetails>

@@ -856,7 +856,20 @@ export async function saveHomework(formData: FormData) {
 export async function createAssignment(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager", "teacher"]);
   const supabase = await createClient();
-  const classId = text(formData.get("class_id"));
+  const requestedClassId = text(formData.get("class_id"));
+  const sessionId = text(formData.get("session_id"));
+  let classId = requestedClassId;
+  if (sessionId) {
+    const { data: sessionRow, error: sessionError } = await supabase
+      .from("sessions")
+      .select("id,class_id")
+      .eq("id", sessionId)
+      .is("archived_at", null)
+      .single();
+    if (sessionError || !sessionRow) go("/academic", undefined, sessionError?.message || "Không tìm thấy Session đã chọn.");
+    classId = String(sessionRow.class_id);
+  }
+  if (!classId) go("/academic", undefined, "Vui lòng chọn Lớp hoặc Session để giao assignment.");
   const material = formData.get("material_file");
 
   if (material instanceof File && material.size > 20 * 1024 * 1024) {
@@ -865,7 +878,7 @@ export async function createAssignment(formData: FormData) {
 
   const { data: assignment, error } = await supabase.from("assignments").insert({
     class_id: classId,
-    session_id: text(formData.get("session_id")) || null,
+    session_id: sessionId || null,
     title: text(formData.get("title")),
     instructions: text(formData.get("instructions")),
     due_at: text(formData.get("due_at")) || null,

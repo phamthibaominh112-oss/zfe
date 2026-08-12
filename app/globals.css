@@ -1371,3 +1371,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .observer-schedule-filter .teacher-filter-copy>span{
   color:#6c3cc5;
 }
+
+/* v1.5.2 — Assignment class/session selection */
+.assignment-class-helper{grid-column:1/-1;padding:9px 11px;border-radius:10px;background:#f4f7ff;color:#475467;font-size:11px;line-height:1.4}
