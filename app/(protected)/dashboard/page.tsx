@@ -319,7 +319,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     classIds.length ? supabase.from("sessions").select("id,class_id,status").in("class_id", classIds).is("archived_at", null) : Promise.resolve({ data: [] as any[] }),
     supabase.from("tuition_accounts").select("id,package_name,balance_amount,renewal_due_date,status").eq("student_id", student.id).order("created_at", { ascending: false }).limit(3),
     supabase.from("progress_feedback").select("id,milestone,strengths,areas_to_improve,current_performance,recommendation,status,published_at,enrollments!inner(student_id,classes(code,name))").eq("enrollments.student_id", student.id).eq("status", "Published").order("published_at", { ascending: false }).limit(4),
-    classIds.length ? supabase.from("assignments").select("id,title,due_at,max_score,class_id,classes(code),assignment_submissions(id,status,score,student_id)").in("class_id", classIds).not("published_at", "is", null).order("due_at").limit(8) : Promise.resolve({ data: [] as any[] }),
+    classIds.length ? supabase.from("assignments").select("id,title,instructions,due_at,max_score,class_id,material_path,material_name,material_mime,material_size,classes(code),assignment_submissions(id,status,score,feedback,student_id,file_path)").in("class_id", classIds).not("published_at", "is", null).order("due_at").limit(8) : Promise.resolve({ data: [] as any[] }),
     supabase.from("attendance").select("session_id,status,sessions(id,session_no,scheduled_date,class_id,classes(code,name),session_teachers(teachers(id,full_name)))").eq("student_id", student.id).in("status", ["Present","Late","Joined partially"]).order("marked_at", { ascending: false }).limit(12),
     supabase.from("teacher_ratings").select("id,session_id,teacher_id,overall").eq("student_id", student.id),
     classIds.length ? supabase.from("class_teachers").select("class_id,role,teachers(id,code,full_name)").in("class_id", classIds) : Promise.resolve({ data: [] as any[] })
@@ -339,6 +339,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const totalSessions = Number(primaryClass?.total_sessions || primaryClassSessions.length || 0);
   const progress = totalSessions ? Math.min(100, Math.round((completedCount / totalSessions) * 100)) : 0;
   const tuitionBalance = (tuition.data || []).reduce((sum: number, item: any) => sum + Number(item.balance_amount || 0), 0);
+  const signedAssignmentMaterials = new Map<string,string>();
+  await Promise.all((assignments.data || []).filter((row:any)=>row.material_path).map(async (row:any)=>{
+    const { data } = await supabase.storage.from("assignment-materials").createSignedUrl(row.material_path, 3600);
+    if (data?.signedUrl) signedAssignmentMaterials.set(row.id,data.signedUrl);
+  }));
 
   return <>
     <PageHeader eyebrow="Lịch học của tôi" title={`Xin chào ${student.full_name}`} description="Xem buổi học tiếp theo, tiến độ lớp và những việc bạn cần hoàn thành." />
@@ -369,7 +374,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {assignments.data?.length ? <div className="task-stack">{assignments.data.slice(0,4).map((item: any) => {
           const own = (item.assignment_submissions || []).find((x: any) => x.student_id === student.id);
           const classRow = joined(item.classes);
-          return <div className="task-card task-static" key={item.id}><span className="task-number">{classRow?.code?.slice(0,2) || "BT"}</span><div><strong>{item.title}</strong><small>{own ? `Trạng thái: ${own.status}` : `Hạn: ${item.due_at ? new Date(item.due_at).toLocaleDateString("vi-VN") : "Không giới hạn"}`}</small></div></div>;
+          return <div className="task-card task-static" key={item.id}><span className="task-number">{classRow?.code?.slice(0,2) || "BT"}</span><div><strong>{item.title}</strong><small>{own ? `Trạng thái: ${own.status}` : `Hạn: ${item.due_at ? new Date(item.due_at).toLocaleDateString("vi-VN") : "Không giới hạn"}`}</small>{item.material_path&&signedAssignmentMaterials.get(item.id)?<a className="task-download-link" href={signedAssignmentMaterials.get(item.id)} target="_blank" rel="noreferrer">↓ Có file đề để tải</a>:null}</div></div>;
         })}</div> : <Empty title="Chưa có bài tập mới" description="Bài tập sẽ xuất hiện sau khi giáo viên giao." />}
       </Panel>
     </div>
@@ -381,11 +386,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {matchedTeachers.length ? <div className="people-strip vertical">{matchedTeachers.map((teacher:any) => <div className="person-chip" key={teacher.id}><span>{String(teacher.full_name || "GV").slice(0,2).toUpperCase()}</span><div><strong>{teacher.full_name}</strong><small>{teacher.code || "Giáo viên"}</small></div></div>)}</div> : <Empty title="Chưa có giáo viên phụ trách" description="Tên giáo viên sẽ hiện sau khi trung tâm phân công lớp." />}
       </Panel>
     </div>
-    <Panel className="section-gap" title="Nộp bài tập" description="Chọn file và gửi trực tiếp cho giáo viên">
+    <Panel className="section-gap" title="Bài tập & file trao đổi" description="Tải file GV giao → làm bài → upload bài làm ngược lại cho GV">
       {assignments.data?.length ? <div className="alert-list">{assignments.data.map((item: any) => {
         const own = (item.assignment_submissions || []).find((x: any)=>x.student_id===student.id);
         const classRow = joined(item.classes);
-        return <div className="alert-item" key={item.id}><i /><div><strong>{classRow?.code || "Lớp"} · {item.title}</strong><span>Hạn: {item.due_at ? new Date(item.due_at).toLocaleString("vi-VN") : "Không giới hạn"}</span>{(!own || own.status === "Revision required") ? <form action={submitAssignment} className="inline-form section-gap"><input type="hidden" name="assignment_id" value={item.id}/><input className="input" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx" required/><button className="button button-secondary">Nộp bài</button></form> : own.score != null ? <span>Điểm: {own.score}/{item.max_score}</span> : null}</div><Status value={own?.status || "Not submitted"} /></div>;
+        return <div className="assignment-exchange-card" key={item.id}><div className="assignment-exchange-head"><div><strong>{classRow?.code || "Lớp"} · {item.title}</strong><span>Hạn: {item.due_at ? new Date(item.due_at).toLocaleString("vi-VN") : "Không giới hạn"}</span></div><Status value={own?.status || "Not submitted"} /></div><p className="assignment-instructions">{item.instructions}</p>{item.material_path&&signedAssignmentMaterials.get(item.id)?<a className="button button-yellow assignment-download-button" href={signedAssignmentMaterials.get(item.id)} target="_blank" rel="noreferrer" download={item.material_name||undefined}>↓ Tải file đề · {item.material_name||"Tài liệu BTVN"}</a>:<div className="assignment-no-file">Bài này không có file đính kèm — xem hướng dẫn phía trên.</div>}{(!own || own.status === "Revision required") ? <form action={submitAssignment} className="assignment-submit-form"><input type="hidden" name="assignment_id" value={item.id}/><label className="form-group"><span>{own?.status==="Revision required"?"Upload bản chỉnh sửa":"Upload bài làm của bạn"}</span><input className="input" type="file" name="file" accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg,.zip" required/><small>Tối đa 20MB · PDF/Word/PPT/Excel/ảnh/ZIP</small></label><button className="button button-primary">{own?.status==="Revision required"?"Nộp lại bài":"Upload & nộp bài"}</button></form> : <div className="assignment-submitted-note"><strong>✓ Đã nộp bài</strong>{own.score != null?<span>Điểm: {own.score}/{item.max_score}</span>:null}{own.feedback?<span>GV nhận xét: {own.feedback}</span>:null}</div>}</div>;
       })}</div> : <Empty title="Chưa có bài tập" description="Bạn chưa được giao bài tập nào." />}
     </Panel>
     <details className="secondary-section section-gap">

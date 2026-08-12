@@ -785,8 +785,15 @@ export async function saveHomework(formData: FormData) {
 export async function createAssignment(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager", "teacher"]);
   const supabase = await createClient();
-  const { error } = await supabase.from("assignments").insert({
-    class_id: text(formData.get("class_id")),
+  const classId = text(formData.get("class_id"));
+  const material = formData.get("material_file");
+
+  if (material instanceof File && material.size > 20 * 1024 * 1024) {
+    go("/academic", undefined, "File giao BTVN tối đa 20MB.");
+  }
+
+  const { data: assignment, error } = await supabase.from("assignments").insert({
+    class_id: classId,
     session_id: text(formData.get("session_id")) || null,
     title: text(formData.get("title")),
     instructions: text(formData.get("instructions")),
@@ -794,10 +801,38 @@ export async function createAssignment(formData: FormData) {
     max_score: toNumber(formData.get("max_score"), 100),
     created_by: profile.id,
     published_at: formData.get("publish") === "on" ? new Date().toISOString() : null
-  });
-  if (error) go("/academic", undefined, error.message);
+  }).select("id").single();
+
+  if (error || !assignment) go("/academic", undefined, error?.message || "Không tạo được assignment.");
+
+  if (material instanceof File && material.size > 0) {
+    const safeName = material.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${assignment.id}/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("assignment-materials")
+      .upload(path, material, { upsert: false, contentType: material.type || undefined });
+
+    if (uploadError) {
+      await supabase.from("assignments").delete().eq("id", assignment.id);
+      go("/academic", undefined, `Không upload được file giao BTVN: ${uploadError.message}`);
+    }
+
+    const { error: updateError } = await supabase.from("assignments").update({
+      material_path: path,
+      material_name: material.name,
+      material_mime: material.type || null,
+      material_size: material.size,
+      updated_at: new Date().toISOString()
+    }).eq("id", assignment.id);
+
+    if (updateError) go("/academic", undefined, updateError.message);
+  }
+
   revalidatePath("/academic");
-  go("/academic", "Đã tạo assignment.");
+  revalidatePath("/dashboard");
+  go("/academic", material instanceof File && material.size > 0
+    ? "Đã tạo assignment và upload file cho học viên."
+    : "Đã tạo assignment.");
 }
 
 export async function submitAssignment(formData: FormData) {
@@ -806,6 +841,7 @@ export async function submitAssignment(formData: FormData) {
   const assignmentId = text(formData.get("assignment_id"));
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) go("/dashboard", undefined, "Vui lòng chọn file bài làm.");
+  if (file.size > 20 * 1024 * 1024) go("/dashboard", undefined, "File bài làm tối đa 20MB.");
   const { data: student } = await supabase.from("students").select("id").eq("user_id", profile.id).single();
   if (!student) go("/dashboard", undefined, "Không tìm thấy student profile.");
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");

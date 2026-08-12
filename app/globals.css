@@ -1105,3 +1105,29 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .admin-override-details{min-width:100px}.admin-teacher-override-list{display:grid;gap:10px}.admin-teacher-override-row{display:grid;grid-template-columns:minmax(220px,1fr) 190px auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:11px 12px}.admin-teacher-override-row>div{display:grid;gap:3px}.admin-teacher-override-row span,.admin-teacher-override-row small{font-size:11px;color:var(--muted)}
 @media(max-width:900px){.milestone-warning-grid{grid-template-columns:1fr 1fr}.attendance-student-row{grid-template-columns:1fr}.attendance-quick-actions{justify-content:flex-start;flex-wrap:wrap}.admin-teacher-override-row{grid-template-columns:1fr}.unassigned-class-warning{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.enrollment-date-strip,.milestone-warning-grid{grid-template-columns:1fr}.student-renewal-warning{flex-direction:column}}
+
+
+/* v1.4.5 — Assignment File Exchange */
+.assignment-upload-field small{color:var(--muted);font-size:11px;line-height:1.4}
+.assignment-material-list{display:grid;gap:10px}
+.assignment-material-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.assignment-material-row>div:first-child{display:grid;gap:4px}
+.assignment-material-row span,.assignment-material-row small{color:var(--muted);font-size:12px}
+.assignment-material-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.task-download-link{display:inline-block;margin-top:4px;color:#2147d8;font-size:11px;font-weight:800;text-decoration:none}
+.assignment-exchange-card{border:1px solid #dce3f5;border-radius:16px;padding:15px;background:#fff;display:grid;gap:12px}
+.assignment-exchange-card+.assignment-exchange-card{margin-top:12px}
+.assignment-exchange-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.assignment-exchange-head>div{display:grid;gap:4px}.assignment-exchange-head span{color:var(--muted);font-size:12px}
+.assignment-instructions{margin:0;color:#344054;white-space:pre-wrap;line-height:1.55}
+.assignment-download-button{width:max-content;max-width:100%}
+.assignment-no-file{padding:9px 11px;border-radius:10px;background:#f7f8fb;color:var(--muted);font-size:12px}
+.assignment-submit-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;padding-top:12px;border-top:1px solid var(--line)}
+.assignment-submit-form .form-group{margin:0}
+.assignment-submit-form small{color:var(--muted);font-size:11px}
+.assignment-submitted-note{display:flex;gap:12px;flex-wrap:wrap;padding:10px 12px;border-radius:11px;background:#ecf8f1;color:#176b43}
+@media(max-width:720px){
+  .assignment-material-row,.assignment-submit-form{grid-template-columns:1fr}
+  .assignment-material-actions{justify-content:flex-start}
+  .assignment-download-button{width:100%;text-align:center}
+}
