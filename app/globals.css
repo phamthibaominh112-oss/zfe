@@ -1251,3 +1251,113 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   color:#667085;
   line-height:1.35;
 }
+
+
+/* v1.5.0 — Observer compact layout fix inside narrow weekly calendar cards */
+.session-observer-quick{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.session-observer-quick>summary{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.observer-summary-icon{
+  flex:0 0 auto;
+}
+.session-observer-form{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.observer-field{
+  display:grid;
+  gap:5px;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+.observer-field label{
+  display:block;
+  min-width:0;
+  color:#1d2939;
+  font-size:11px;
+  font-weight:850;
+  line-height:1.25;
+}
+.observer-select,
+.observer-textarea{
+  display:block;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  border:1px solid #d3daf0;
+  border-radius:10px;
+  background:#fff;
+  color:#1d2939;
+  font:inherit;
+}
+.observer-select{
+  height:38px;
+  padding:0 30px 0 10px;
+  font-size:11px;
+  text-overflow:ellipsis;
+}
+.observer-textarea{
+  min-height:74px;
+  max-height:130px;
+  resize:vertical;
+  padding:9px 10px;
+  font-size:11px;
+  line-height:1.4;
+  overflow-wrap:anywhere;
+}
+.observer-save-button{
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box;
+  padding-left:8px!important;
+  padding-right:8px!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere;
+  text-align:center;
+  line-height:1.2;
+}
+.session-observer-help{
+  display:block;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+  overflow-wrap:anywhere;
+  font-size:10px;
+}
+
+/* Prevent any opened management detail from forcing a weekly day column wider. */
+.day-events,
+.session-card,
+.session-team-quick,
+.session-observer-quick,
+.session-team-quick-form,
+.session-observer-form{
+  min-width:0;
+}
+.session-card{
+  overflow:hidden;
+}

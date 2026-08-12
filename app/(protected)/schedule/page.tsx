@@ -265,13 +265,22 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 <p>{classRow?.name || item.topic || "Buổi học"}</p>
                 <div className="session-staff-lines"><small>{teacherText}</small><small className={assistantTeacher ? "session-ta assigned" : "session-ta empty"}>TA: {assistantTeacher?.full_name || "Chưa phân TA"}</small>{observer ? <small className="session-observer assigned">Observer: {observer.observer_name}</small> : canManage ? <small className="session-observer empty">Observer: Chưa phân</small> : null}</div>
                 {canManage ? <details className="session-observer-quick">
-                  <summary>👁 Phân Observer</summary>
+                  <summary><span className="observer-summary-icon">👁</span><span>Phân Observer</span></summary>
                   <form action={updateSessionObserver} className="session-observer-form">
                     <input type="hidden" name="session_id" value={item.id}/>
-                    <SelectField label="Observer (optional)" name="observer_user_id" defaultValue={observer?.observer_user_id || ""} options={observerOptions}/>
-                    <TextAreaField label="Ghi chú observation" name="observer_note" defaultValue={observer?.note || ""} placeholder="Ví dụ: Observe classroom management / interaction / lesson delivery..."/>
-                    <button className="button button-primary">Lưu Observer</button>
-                    {observer ? <small className="session-observer-help">Chọn “Chọn...” rồi Lưu để gỡ Observer khỏi buổi này.</small> : <small className="session-observer-help">Observer chỉ gắn vào buổi này, không tự áp dụng cho cả lớp.</small>}
+                    <div className="observer-field">
+                      <label htmlFor={`observer-${item.id}`}>Observer</label>
+                      <select id={`observer-${item.id}`} className="observer-select" name="observer_user_id" defaultValue={observer?.observer_user_id || ""}>
+                        <option value="">Chưa phân Observer</option>
+                        {observerOptions.map((opt:any)=><option value={opt.value} key={opt.value}>{opt.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="observer-field">
+                      <label htmlFor={`observer-note-${item.id}`}>Ghi chú</label>
+                      <textarea id={`observer-note-${item.id}`} className="observer-textarea" name="observer_note" defaultValue={observer?.note || ""} placeholder="Class management, interaction, lesson delivery..."/>
+                    </div>
+                    <button className="button button-primary observer-save-button">Lưu Observer</button>
+                    {observer ? <small className="session-observer-help">Chọn “Chưa phân Observer” rồi Lưu để gỡ khỏi buổi này.</small> : <small className="session-observer-help">Chỉ áp dụng cho buổi này.</small>}
                   </form>
                 </details> : null}
                 {canManage ? <details className="session-team-quick">
