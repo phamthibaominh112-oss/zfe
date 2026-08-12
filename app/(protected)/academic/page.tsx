@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { completeSession, createAssignment, createAssessment, gradeAssignmentSubmission, markAllPresentForSession, markAttendance, quickMarkAttendance, reviewProgressFeedback, saveAssessmentResult, saveHomework, submitProgressFeedback } from "@/app/actions";
+import { completeSession, createAssignment, createAssessment, gradeAssignmentSubmission, batchMarkAttendance, markAllPresentForSession, markAttendance, quickMarkAttendance, reviewProgressFeedback, saveAssessmentResult, saveHomework, submitProgressFeedback } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
@@ -81,9 +81,94 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Vận hành học thuật" title="Điểm danh, bài tập & đánh giá" description={profile.role === "teacher" ? "Cập nhật điểm danh, bài tập và phản hồi cho các lớp bạn phụ trách." : "Theo dõi điểm danh, mức độ hoàn thành bài tập, điểm số và các phản hồi đang chờ duyệt."} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
-    <Panel className="section-gap attendance-command-center" title="Điểm danh nhanh hôm nay" description="Roster bày sẵn theo từng lớp. Một chạm để điểm danh, không cần chọn Session + HV thủ công.">
-      {todaySessions.length?<div className="attendance-session-stack">{todaySessions.map((session:any)=>{const roster=rosterByClass.get(session.class_id)||[];return <section className="attendance-session-card" key={session.id}><div className="attendance-session-head"><div><strong>{session.classes?.code} · {sessionDisplayLabel(session.status,session.session_no)}</strong><span>{session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length} HV</span></div><form action={markAllPresentForSession}><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="class_id" value={session.class_id}/><button className="button button-primary button-small">✓ Tất cả có mặt</button></form></div>{roster.length?<div className="attendance-roster">{roster.map((en:any)=>{const st=en.students;const current:any=attendanceMap.get(`${session.id}|${en.student_id}`);return <div className="attendance-student-row" key={en.student_id}><div className="attendance-student-name"><strong>{st?.full_name}</strong><span>{st?.code}</span></div><div className="attendance-current"><Status value={current?.status||"Chưa điểm danh"}/></div><div className="attendance-quick-actions"><form action={quickMarkAttendance}><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="student_id" value={en.student_id}/><input type="hidden" name="status" value="Present"/><button className="attendance-btn present">✓</button></form><form action={quickMarkAttendance} className="attendance-late-form"><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="student_id" value={en.student_id}/><input type="hidden" name="status" value="Late"/><input className="attendance-minute-input" name="late_minutes" type="number" min="0" defaultValue={current?.status==="Late"?current.late_minutes||5:5}/><button className="attendance-btn late">Trễ</button></form><form action={quickMarkAttendance}><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="student_id" value={en.student_id}/><input type="hidden" name="status" value="Excused absence"/><button className="attendance-btn excused">P</button></form><form action={quickMarkAttendance}><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="student_id" value={en.student_id}/><input type="hidden" name="status" value="Unexcused absence"/><button className="attendance-btn absent">V</button></form></div></div>})}</div>:<Empty title="Lớp chưa có roster" description="Kéo học viên vào lớp trước khi điểm danh."/>}</section>})}</div>:<Empty title="Hôm nay chưa có session" description="Khi có lớp hôm nay, roster sẽ tự hiện tại đây."/>}
+    <Panel className="section-gap attendance-command-center" title="Điểm danh theo Session" description="Bấm Session → roster của lớp hiện ngay → chọn trạng thái cho nhiều học viên → Lưu một lần.">
+      {todaySessions.length ? <div className="attendance-session-selector">
+        {todaySessions.map((session:any)=>{
+          const roster=rosterByClass.get(session.class_id)||[];
+          const markedCount=roster.filter((en:any)=>attendanceMap.get(`${session.id}|${en.student_id}`)).length;
+          return <details className="attendance-batch-session" key={session.id}>
+            <summary>
+              <div className="attendance-session-summary-main">
+                <strong>{session.classes?.code} · {sessionDisplayLabel(session.status,session.session_no)}</strong>
+                <span>{session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length} HV</span>
+              </div>
+              <div className="attendance-session-summary-status">
+                <b>{markedCount}/{roster.length}</b>
+                <span>đã điểm danh</span>
+              </div>
+            </summary>
+
+            <form action={batchMarkAttendance} className="attendance-batch-form">
+              <input type="hidden" name="session_id" value={session.id}/>
+              <input type="hidden" name="class_id" value={session.class_id}/>
+
+              <div className="attendance-batch-toolbar">
+                <div>
+                  <strong>Roster · {session.classes?.code}</strong>
+                  <span>Default là Có mặt. Chỉ đổi những trường hợp Trễ / Vắng.</span>
+                </div>
+                <div className="attendance-batch-legend">
+                  <span className="present">✓ Có mặt</span>
+                  <span className="late">Trễ</span>
+                  <span className="excused">P · Vắng phép</span>
+                  <span className="absent">V · Không phép</span>
+                </div>
+              </div>
+
+              {roster.length ? <div className="attendance-batch-roster">
+                {roster.map((en:any)=>{
+                  const st=en.students;
+                  const current:any=attendanceMap.get(`${session.id}|${en.student_id}`);
+                  const currentStatus=current?.status||"Present";
+                  return <div className="attendance-batch-row" key={en.student_id}>
+                    <div className="attendance-batch-student">
+                      <strong>{st?.full_name}</strong>
+                      <span>{st?.code}</span>
+                    </div>
+
+                    <div className="attendance-status-choice">
+                      <label className={`attendance-choice present ${currentStatus==="Present"?"selected":""}`}>
+                        <input type="radio" name={`status_${en.student_id}`} value="Present" defaultChecked={currentStatus==="Present"}/>
+                        <span>✓</span><small>Có mặt</small>
+                      </label>
+                      <label className={`attendance-choice late ${currentStatus==="Late"?"selected":""}`}>
+                        <input type="radio" name={`status_${en.student_id}`} value="Late" defaultChecked={currentStatus==="Late"}/>
+                        <span>⏱</span><small>Trễ</small>
+                      </label>
+                      <label className={`attendance-choice excused ${currentStatus==="Excused absence"?"selected":""}`}>
+                        <input type="radio" name={`status_${en.student_id}`} value="Excused absence" defaultChecked={currentStatus==="Excused absence"}/>
+                        <span>P</span><small>Có phép</small>
+                      </label>
+                      <label className={`attendance-choice absent ${currentStatus==="Unexcused absence"?"selected":""}`}>
+                        <input type="radio" name={`status_${en.student_id}`} value="Unexcused absence" defaultChecked={currentStatus==="Unexcused absence"}/>
+                        <span>V</span><small>Không phép</small>
+                      </label>
+                    </div>
+
+                    <div className="attendance-batch-meta">
+                      <label>
+                        <span>Trễ (phút)</span>
+                        <input name={`late_${en.student_id}`} type="number" min="0" defaultValue={current?.late_minutes||5}/>
+                      </label>
+                      <label>
+                        <span>Ghi chú</span>
+                        <input name={`reason_${en.student_id}`} type="text" defaultValue={current?.reason||""} placeholder="Nếu cần"/>
+                      </label>
+                    </div>
+                  </div>
+                })}
+              </div> : <Empty title="Lớp chưa có roster" description="Kéo học viên vào lớp trước khi điểm danh."/>}
+
+              {roster.length ? <div className="attendance-batch-savebar">
+                <span>Kiểm tra một lượt rồi lưu cho cả lớp.</span>
+                <button className="button button-primary">✓ Lưu điểm danh {roster.length} HV</button>
+              </div> : null}
+            </form>
+          </details>
+        })}
+      </div> : <Empty title="Hôm nay chưa có Session" description="Khi có lớp hôm nay, bấm Session để mở roster và điểm danh hàng loạt."/>}
     </Panel>
+
     {milestoneSessions.length?<Panel className="section-gap" title="Cảnh báo Midterm / Final" description="Buổi 18 = Midterm · Buổi 36 = Final."><div className="milestone-warning-grid">{milestoneSessions.slice(0,10).map((row:any)=>{const isMid=Number(row.session_no)===18;return <div className={`milestone-warning-card ${isMid?"mid":"final"}`} key={row.id}><span>{isMid?"MIDTERM":"FINAL"}</span><strong>{row.classes?.code} · Buổi {row.session_no}</strong><small>{formatDate(row.scheduled_date)} · {row.start_time?.slice(0,5)}</small></div>})}</div></Panel>:null}
     <div className="grid-2">
       <Panel title="Sessions cần vận hành" description={profile.role === "teacher" ? "Giáo viên Check-in/Check-out tại mục Chấm công & KPI" : "Học vụ có thể xác nhận session khi cần xử lý ngoại lệ"}>

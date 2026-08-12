@@ -789,6 +789,54 @@ export async function completeSession(formData: FormData) {
   go("/academic", "Session đã được xác nhận hoàn thành.");
 }
 
+export async function batchMarkAttendance(formData: FormData) {
+  const profile = await requireRole(["admin","academic_manager","teacher"]);
+  const supabase = await createClient();
+
+  const sessionId = text(formData.get("session_id"));
+  const classId = text(formData.get("class_id"));
+  if (!sessionId || !classId) go("/academic", undefined, "Không xác định được Session / Lớp.");
+
+  const { data: roster, error: rosterError } = await supabase
+    .from("enrollments")
+    .select("student_id")
+    .eq("class_id", classId)
+    .eq("status", "Active")
+    .is("archived_at", null);
+
+  if (rosterError) go("/academic", undefined, rosterError.message);
+  if (!roster?.length) go("/academic", undefined, "Lớp chưa có học viên active.");
+
+  const rows = (roster as any[]).map((row:any) => {
+    const studentId = String(row.student_id);
+    const status = text(formData.get(`status_${studentId}`)) || "Present";
+    const lateMinutes = status === "Late"
+      ? Math.max(0, toNumber(formData.get(`late_${studentId}`), 5))
+      : 0;
+    const reason = text(formData.get(`reason_${studentId}`)) || null;
+
+    return {
+      session_id: sessionId,
+      student_id: studentId,
+      status,
+      late_minutes: lateMinutes,
+      reason,
+      marked_by: profile.id,
+      marked_at: new Date().toISOString()
+    };
+  });
+
+  const { error } = await supabase
+    .from("attendance")
+    .upsert(rows, { onConflict: "session_id,student_id" });
+
+  if (error) go("/academic", undefined, error.message);
+
+  revalidatePath("/academic");
+  revalidatePath("/dashboard");
+  go("/academic", `Đã lưu điểm danh ${rows.length} học viên trong một lần.`);
+}
+
 export async function quickMarkAttendance(formData: FormData) {
   const profile = await requireRole(["admin","academic_manager","teacher"]);
   const supabase = await createClient();
