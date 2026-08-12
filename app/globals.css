@@ -1361,3 +1361,13 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .session-card{
   overflow:hidden;
 }
+
+
+/* v1.5.1 — Observer schedule filter */
+.observer-schedule-filter{
+  border-color:#ded4f8;
+  background:linear-gradient(135deg,#fbf9ff 0%,#fff 100%);
+}
+.observer-schedule-filter .teacher-filter-copy>span{
+  color:#6c3cc5;
+}

@@ -29,9 +29,11 @@ function scheduleReturnPath(formData: FormData) {
   const week = text(formData.get("return_week"));
   const teacher = text(formData.get("return_teacher"));
   const classId = text(formData.get("return_class"));
+  const observer = text(formData.get("return_observer"));
   if (week) params.set("week", week);
   if (teacher) params.set("teacher", teacher);
   if (classId) params.set("class", classId);
+  if (observer) params.set("observer", observer);
   return `/schedule${params.size ? `?${params.toString()}` : ""}`;
 }
 
