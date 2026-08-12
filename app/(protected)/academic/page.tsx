@@ -90,11 +90,11 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
             <summary>
               <div className="attendance-session-summary-main">
                 <strong>{session.classes?.code} · {sessionDisplayLabel(session.status,session.session_no)}</strong>
-                <span>{session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length} HV</span>
+                <span>{session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length ? `${roster.length} HV` : "⚠ Chưa có roster / chưa đọc được enrollment"}</span>
               </div>
               <div className="attendance-session-summary-status">
-                <b>{markedCount}/{roster.length}</b>
-                <span>đã điểm danh</span>
+                <b>{roster.length ? `${markedCount}/${roster.length}` : "—"}</b>
+                <span>{roster.length ? "đã điểm danh" : "cần kiểm tra roster"}</span>
               </div>
             </summary>
 
