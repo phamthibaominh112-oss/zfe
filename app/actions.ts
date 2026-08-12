@@ -602,13 +602,15 @@ export async function duplicatePreviousWeekSchedule(formData: FormData) {
   if(sourceError) go(`/schedule?week=${returnWeek}`,undefined,sourceError.message);
   if(!sourceRows?.length) go(`/schedule?week=${returnWeek}`,undefined,"Tuần trước không có session để duplicate.");
 
-  const classIds=Array.from(new Set(sourceRows.map((x:any)=>x.class_id)));
+  const classIds: string[] = Array.from(
+    new Set<string>((sourceRows as any[]).map((x:any)=>String(x.class_id)))
+  );
   const [{data:priorRows},{data:targetRows}]=await Promise.all([
     supabase.from("sessions").select("class_id,session_no").in("class_id",classIds).lt("scheduled_date",targetStart).neq("status","Cancelled").is("archived_at",null),
     supabase.from("sessions").select("class_id,scheduled_date,start_time").in("class_id",classIds).gte("scheduled_date",targetStart).lte("scheduled_date",targetEnd).neq("status","Cancelled").is("archived_at",null)
   ]);
-  const nextNo=new Map<string,number>();
-  for(const classId of classIds){
+  const nextNo = new Map<string, number>();
+  for (const classId of classIds) {
     const maxNo=Math.max(0,...(priorRows||[]).filter((x:any)=>x.class_id===classId).map((x:any)=>Number(x.session_no||0)));
     nextNo.set(classId,maxNo+1);
   }
