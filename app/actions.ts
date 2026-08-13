@@ -1938,13 +1938,16 @@ export async function updateTeacherHourlyRate(formData: FormData) {
   const teacherId = text(formData.get("teacher_id"));
   const month = text(formData.get("return_month"));
   const target = text(formData.get("return_path")) || (month ? `/payroll?month=${month}` : "/payroll");
-  const hourlyRate = toNumber(formData.get("hourly_rate"));
+  const tutoringRate = toNumber(formData.get("tutoring_hourly_rate"));
+  const groupRate = toNumber(formData.get("group_hourly_rate"));
   const taHourlyRate = toNumber(formData.get("ta_hourly_rate"));
-  if (hourlyRate < 50000 || hourlyRate > 1500000) go(target, undefined, "Đơn giá giờ dạy phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
+  if (tutoringRate < 50000 || tutoringRate > 1500000) go(target, undefined, "Rate Kèm (1–3 HV) phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
+  if (groupRate < 50000 || groupRate > 1500000) go(target, undefined, "Rate Nhóm (>3 HV) phải từ 50.000đ đến 1.500.000đ mỗi giờ.");
   if (taHourlyRate < 0 || taHourlyRate > 1500000) go(target, undefined, "Đơn giá TA phải từ 0đ đến 1.500.000đ mỗi giờ.");
   const { error } = await supabase.rpc("update_teacher_compensation_rate", {
     p_teacher_id: teacherId,
-    p_hourly_rate: hourlyRate,
+    p_tutoring_hourly_rate: tutoringRate,
+    p_group_hourly_rate: groupRate,
     p_ta_hourly_rate: taHourlyRate,
     p_effective_from: text(formData.get("effective_from")) || new Date().toISOString().slice(0, 10),
     p_note: text(formData.get("note")) || null
@@ -1953,7 +1956,7 @@ export async function updateTeacherHourlyRate(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/payroll");
   revalidatePath("/finance/expenses");
-  go(target, "Đã cập nhật đơn giá giờ dạy. Giáo viên sẽ thấy mức mới trên tài khoản của mình.");
+  go(target, "Đã cập nhật Rate Card Kèm / Nhóm / TA. Bảng lương live sẽ áp dụng theo sĩ số từng session.");
 }
 
 export async function generateTeacherPayrollMonth(formData: FormData) {

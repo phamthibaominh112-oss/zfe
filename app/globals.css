@@ -1540,3 +1540,148 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 @media(max-width:700px){
   .past-session-card,.override-approval-card,.override-approval-actions{grid-template-columns:1fr}
 }
+
+
+/* v1.6.2 — payroll/timesheet + table layout */
+.tuition-table,.payroll-admin-table{width:100%;border-collapse:collapse}
+.tuition-table{min-width:1180px}
+.payroll-admin-table{min-width:1180px}
+.tuition-table th,.tuition-table td,.payroll-admin-table th,.payroll-admin-table td{vertical-align:top;padding-left:12px;padding-right:12px}
+.tuition-table td:nth-child(3),.tuition-table td:nth-child(4),.tuition-table td:nth-child(5),
+.payroll-admin-table td:nth-child(2),.payroll-admin-table td:nth-child(3),.payroll-admin-table td:nth-child(4){white-space:nowrap}
+.tuition-table th:nth-child(1){min-width:190px}.tuition-table th:nth-child(2){min-width:160px}.tuition-table th:nth-child(6){min-width:180px}.tuition-table th:nth-child(8){min-width:160px}.tuition-table th:nth-child(9){min-width:120px}
+.payroll-admin-table th:nth-child(1){min-width:170px}.payroll-admin-table th:nth-child(2),.payroll-admin-table th:nth-child(3){min-width:120px}.payroll-admin-table th:nth-child(4){min-width:190px}.payroll-admin-table th:nth-child(5),.payroll-admin-table th:nth-child(6){min-width:130px}.payroll-admin-table th:nth-child(7){min-width:250px}
+.payroll-row-actions{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap}
+.timesheet-print-brand,.kpi-report-meta{display:flex;align-items:center;gap:18px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:#fff;margin-bottom:16px}
+.timesheet-print-brand img{width:120px;height:auto;object-fit:contain}
+.timesheet-print-brand>div{display:grid;gap:4px}.timesheet-print-brand span{color:var(--muted);font-size:12px}
+.timesheet-table{min-width:1100px}
+.timesheet-table td,.timesheet-table th{vertical-align:top}
+.timesheet-pay-summary{display:grid;gap:8px}.timesheet-pay-summary>div{display:grid;grid-template-columns:140px 1fr auto;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:center}.timesheet-pay-summary .total{background:#f4f7ff;border-radius:10px;border-bottom:0}.timesheet-pay-summary b{font-size:16px}
+.timesheet-statement-status{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+@media print{
+  .timesheet-report .shell-sidebar,.timesheet-report .topbar{display:none!important}
+  .timesheet-report{background:#fff!important}
+  .timesheet-print-brand{border:0;padding:0 0 12px;margin-bottom:8px}
+  .timesheet-print-brand img{width:105px}
+  .timesheet-table-wrap{overflow:visible!important}
+  .timesheet-table{min-width:0!important;font-size:9px}
+  .timesheet-table th,.timesheet-table td{padding:5px!important}
+  .timesheet-report .panel{break-inside:avoid}
+}
+
+
+/* v1.7.0 — Finance modal fix */
+.finance-modal-details[open]{
+  position:relative;
+  z-index:1000;
+}
+.finance-modal-details[open]::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:9998;
+  background:rgba(15,23,42,.42);
+  backdrop-filter:blur(3px);
+}
+.finance-modal-details[open] > form{
+  position:fixed!important;
+  z-index:9999!important;
+  top:50%!important;
+  left:50%!important;
+  transform:translate(-50%,-50%)!important;
+  width:min(620px,calc(100vw - 32px))!important;
+  max-width:620px!important;
+  max-height:calc(100vh - 48px)!important;
+  overflow:auto!important;
+  margin:0!important;
+  padding:22px!important;
+  border:1px solid #dce3f0!important;
+  border-radius:18px!important;
+  background:#fff!important;
+  box-shadow:0 24px 80px rgba(15,23,42,.26)!important;
+}
+.finance-modal-details[open] > form::before{
+  content:"Chỉnh sửa";
+  display:block;
+  grid-column:1/-1;
+  margin-bottom:4px;
+  font-size:20px;
+  font-weight:900;
+  color:#172033;
+}
+.finance-modal-details[open] > form .form-group,
+.finance-modal-details[open] > form input,
+.finance-modal-details[open] > form select,
+.finance-modal-details[open] > form textarea{
+  position:relative;
+  z-index:10000;
+  pointer-events:auto!important;
+}
+.finance-modal-details[open] > form .button{
+  position:relative;
+  z-index:10001;
+}
+
+/* Rate card */
+.rate-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rate-card-setting{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  align-items:end;
+}
+.rate-card-teacher{grid-column:1/-1;display:grid;gap:3px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.rate-card-teacher small{color:var(--muted)}
+.rate-card-setting .rate-save-button{grid-column:1/-1}
+@media(max-width:900px){
+  .rate-card-grid,.rate-card-setting{grid-template-columns:1fr}
+  .rate-card-teacher,.rate-card-setting .rate-save-button{grid-column:auto}
+}
+
+/* Payroll split tables */
+.payroll-admin-table{min-width:1450px!important}
+.payroll-admin-table th:nth-child(2),
+.payroll-admin-table th:nth-child(3),
+.payroll-admin-table th:nth-child(4){min-width:165px!important}
+.payroll-admin-table th:nth-child(5){min-width:250px!important}
+
+/* Salary slip */
+.salary-slip-brand{
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:18px 22px;margin:0 0 16px;border-radius:16px;
+  background:#fff;border:1px solid var(--line);
+}
+.salary-slip-brand img{width:130px;height:auto}
+.salary-slip-brand>div{display:grid;gap:4px;text-align:right}
+.salary-slip-brand>div strong{font-size:20px;color:#1735d1}
+.salary-slip-brand>div span{font-size:12px;color:var(--muted)}
+.salary-slip-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}
+.salary-slip-meta>div{display:grid;gap:4px;padding:13px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.salary-slip-meta span{font-size:10px;text-transform:uppercase;font-weight:850;color:var(--muted)}
+.salary-slip-lines{display:grid;gap:8px}
+.salary-slip-lines>div{display:grid;grid-template-columns:180px 1fr auto;gap:14px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.salary-slip-lines>div span{font-weight:800}
+.salary-slip-lines>div b{font-size:17px}
+.salary-slip-lines .salary-slip-total{border:0;border-radius:12px;background:#eef3ff;color:#142c9e}
+.salary-slip-lines .salary-slip-total b{font-size:24px}
+.salary-slip-table{min-width:960px}
+.salary-slip-signatures{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin:38px 20px 12px;text-align:center}
+.salary-slip-signatures>div{display:grid;gap:8px;padding-top:20px;border-top:1px solid #b6bdcc}
+.salary-slip-signatures span{font-size:11px;text-transform:uppercase;color:var(--muted)}
+.salary-slip-signatures small{color:var(--muted)}
+@media(max-width:800px){
+  .salary-slip-meta{grid-template-columns:1fr 1fr}
+  .salary-slip-lines>div{grid-template-columns:1fr}
+}
+@media print{
+  .salary-slip-report{background:#fff!important;color:#111!important}
+  .salary-slip-brand{border:0;padding:0 0 14px;border-bottom:2px solid #1c3ad7;border-radius:0}
+  .salary-slip-brand img{width:110px}
+  .salary-slip-meta{gap:6px}
+  .salary-slip-meta>div{padding:8px;border-radius:8px}
+  .salary-slip-table-wrap{overflow:visible!important}
+  .salary-slip-table{min-width:0!important;font-size:9px}
+  .salary-slip-table th,.salary-slip-table td{padding:5px!important}
+  .salary-slip-signatures{break-inside:avoid}
+}

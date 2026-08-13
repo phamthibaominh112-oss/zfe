@@ -48,45 +48,52 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
 
     const [{ data: statement }, { data: live }, { data: compensation }, { data: history }] = await Promise.all([
       supabase.from("teacher_payroll_statements")
-        .select("id,payroll_month,completed_hours,teaching_hours,ta_hours,hourly_rate_snapshot,ta_hourly_rate_snapshot,teaching_amount,ta_amount,gross_amount,teacher_status,teacher_note,teacher_reviewed_at,admin_status,admin_note,admin_approved_at")
+        .select("id,payroll_month,completed_hours,teaching_hours,ta_hours,tutoring_hours,group_hours,hourly_rate_snapshot,tutoring_rate_snapshot,group_rate_snapshot,ta_hourly_rate_snapshot,tutoring_amount,group_amount,teaching_amount,ta_amount,gross_amount,teacher_status,teacher_note,teacher_reviewed_at,admin_status,admin_note,admin_approved_at")
         .eq("teacher_id", teacher.id).eq("payroll_month", monthDate).maybeSingle(),
       supabase.from("teacher_payroll_live_monthly")
-        .select("completed_hours,hourly_rate,estimated_payroll,teaching_hours,ta_hours,teaching_rate,ta_hourly_rate,teaching_amount,ta_amount")
+        .select("completed_hours,hourly_rate,estimated_payroll,teaching_hours,ta_hours,tutoring_hours,group_hours,teaching_rate,tutoring_rate,group_rate,ta_hourly_rate,tutoring_amount,group_amount,teaching_amount,ta_amount")
         .eq("teacher_id", teacher.id).eq("payroll_month", monthDate).maybeSingle(),
       supabase.from("teacher_compensation_settings")
-        .select("hourly_rate,ta_hourly_rate,effective_from,note")
+        .select("hourly_rate,tutoring_hourly_rate,group_hourly_rate,ta_hourly_rate,effective_from,note")
         .eq("teacher_id", teacher.id).maybeSingle(),
       supabase.from("teacher_payroll_statements")
-        .select("id,payroll_month,completed_hours,teaching_hours,ta_hours,gross_amount,teacher_status,admin_status")
+        .select("id,payroll_month,completed_hours,teaching_hours,ta_hours,tutoring_hours,group_hours,gross_amount,teacher_status,admin_status")
         .eq("teacher_id", teacher.id).order("payroll_month", { ascending: false }).limit(12)
     ]);
 
-    const hours = Number(statement?.completed_hours ?? live?.completed_hours ?? 0);
-    const rate = Number(statement?.hourly_rate_snapshot ?? live?.hourly_rate ?? compensation?.hourly_rate ?? 0);
-    const amount = Number(statement?.gross_amount ?? live?.estimated_payroll ?? hours * rate);
-    const teachingHours = Number(statement?.teaching_hours ?? live?.teaching_hours ?? hours);
-    const taHours = Number(statement?.ta_hours ?? live?.ta_hours ?? 0);
-    const teachingRate = Number(statement?.hourly_rate_snapshot ?? live?.teaching_rate ?? rate);
-    const taRate = Number(statement?.ta_hourly_rate_snapshot ?? live?.ta_hourly_rate ?? compensation?.ta_hourly_rate ?? 0);
-    const teachingAmount = Number(statement?.teaching_amount ?? live?.teaching_amount ?? teachingHours * teachingRate);
-    const taAmount = Number(statement?.ta_amount ?? live?.ta_amount ?? taHours * taRate);
+    const lockedSnapshot = statement && (statement.teacher_status === "Approved" || statement.admin_status !== "Pending");
+    const hours = Number(lockedSnapshot ? statement?.completed_hours : live?.completed_hours ?? statement?.completed_hours ?? 0);
+    const rate = Number(lockedSnapshot ? statement?.hourly_rate_snapshot : live?.hourly_rate ?? statement?.hourly_rate_snapshot ?? compensation?.hourly_rate ?? 0);
+    const amount = Number(lockedSnapshot ? statement?.gross_amount : live?.estimated_payroll ?? statement?.gross_amount ?? hours * rate);
+    const teachingHours = Number(lockedSnapshot ? statement?.teaching_hours : live?.teaching_hours ?? statement?.teaching_hours ?? hours);
+    const taHours = Number(lockedSnapshot ? statement?.ta_hours : live?.ta_hours ?? statement?.ta_hours ?? 0);
+    const teachingRate = Number(lockedSnapshot ? statement?.hourly_rate_snapshot : live?.teaching_rate ?? statement?.hourly_rate_snapshot ?? rate);
+    const taRate = Number(lockedSnapshot ? statement?.ta_hourly_rate_snapshot : live?.ta_hourly_rate ?? statement?.ta_hourly_rate_snapshot ?? compensation?.ta_hourly_rate ?? 0);
+    const teachingAmount = Number(lockedSnapshot ? statement?.teaching_amount : live?.teaching_amount ?? statement?.teaching_amount ?? teachingHours * teachingRate);
+    const taAmount = Number(lockedSnapshot ? statement?.ta_amount : live?.ta_amount ?? statement?.ta_amount ?? taHours * taRate);
+    const tutoringHours = Number(lockedSnapshot ? statement?.tutoring_hours : live?.tutoring_hours ?? statement?.tutoring_hours ?? 0);
+    const groupHours = Number(lockedSnapshot ? statement?.group_hours : live?.group_hours ?? statement?.group_hours ?? 0);
+    const tutoringRate = Number(lockedSnapshot ? statement?.tutoring_rate_snapshot : live?.tutoring_rate ?? statement?.tutoring_rate_snapshot ?? compensation?.tutoring_hourly_rate ?? compensation?.hourly_rate ?? 0);
+    const groupRate = Number(lockedSnapshot ? statement?.group_rate_snapshot : live?.group_rate ?? statement?.group_rate_snapshot ?? compensation?.group_hourly_rate ?? compensation?.hourly_rate ?? 0);
+    const tutoringAmount = Number(lockedSnapshot ? statement?.tutoring_amount : live?.tutoring_amount ?? statement?.tutoring_amount ?? tutoringHours*tutoringRate);
+    const groupAmount = Number(lockedSnapshot ? statement?.group_amount : live?.group_amount ?? statement?.group_amount ?? groupHours*groupRate);
     const isApprovedByTeacher = statement?.teacher_status === "Approved";
 
     return <>
-      <PageHeader eyebrow="Thu nhập của tôi" title={`Bảng lương ${monthLabel(month)}`} description="Kiểm tra số giờ đã hoàn thành, đơn giá và xác nhận bảng lương trước khi Admin duyệt." />
+      <PageHeader eyebrow="Thu nhập của tôi" title={`Bảng lương ${monthLabel(month)}`} description="Kiểm tra số giờ đã hoàn thành, đơn giá và xác nhận bảng lương trước khi Admin duyệt." actions={<div className="page-actions"><Link className="button button-secondary" href={`/payroll/timesheet?month=${month}`}>Bảng công / PDF</Link><Link className="button button-secondary" href={`/payroll/slip?month=${month}`}>Phiếu lương / PDF</Link><Link className="button button-secondary" href={`/workforce/kpi?month=${month}`}>KPI / PDF</Link></div>} />
       <Flash message={params.message} error={params.error} />
       <form className="month-filter" method="get"><label>Chọn tháng<input type="month" name="month" defaultValue={month} /></label><button className="button button-primary">Xem</button></form>
 
       <section className={`payroll-hero ${statement ? "payroll-ready" : ""}`}>
         <div><span>{statement ? "Bảng lương đã được chốt" : "Số liệu tạm tính trong tháng"}</span><h2>{teacher.full_name}</h2><p>{statement ? "Vui lòng kiểm tra trước khi xác nhận." : "Hệ thống tự chốt bảng lương vào ngày cuối tháng."}</p></div>
-        <div className="payroll-amount"><small>{isApprovedByTeacher ? "Mức lương đã xác nhận" : "Mức lương dự kiến"}</small><strong>{formatMoney(amount)}</strong><span>Teaching {teachingHours.toLocaleString("vi-VN")}h · TA {taHours.toLocaleString("vi-VN")}h</span></div>
+        <div className="payroll-amount"><small>{isApprovedByTeacher ? "Mức lương đã xác nhận" : "Mức lương dự kiến"}</small><strong>{formatMoney(amount)}</strong><span>Kèm {tutoringHours.toLocaleString("vi-VN")}h · Nhóm {groupHours.toLocaleString("vi-VN")}h · TA {taHours.toLocaleString("vi-VN")}h</span></div>
       </section>
 
       <div className="metrics-grid section-gap">
-        <MetricCard label="Teaching" value={`${teachingHours.toLocaleString("vi-VN")}h`} note={`${formatMoney(teachingRate)}/h · ${formatMoney(teachingAmount)}`} tone="green" />
+        <MetricCard label="Kèm · 1–3 HV" value={`${tutoringHours.toLocaleString("vi-VN")}h`} note={`${formatMoney(tutoringRate)}/h · ${formatMoney(tutoringAmount)}`} tone="green" />
+        <MetricCard label="Nhóm · >3 HV" value={`${groupHours.toLocaleString("vi-VN")}h`} note={`${formatMoney(groupRate)}/h · ${formatMoney(groupAmount)}`} />
         <MetricCard label="TA / Co-teacher" value={`${taHours.toLocaleString("vi-VN")}h`} note={`${formatMoney(taRate)}/h · ${formatMoney(taAmount)}`} tone="yellow" />
-        <MetricCard label="Xác nhận của GV" value={<Status value={statement?.teacher_status || "Chưa mở"} />} tone={statement?.teacher_status === "Disputed" ? "red" : "yellow"} />
-        <MetricCard label="Duyệt của Admin" value={<Status value={statement?.admin_status || "Chưa mở"} />} tone={statement?.admin_status === "Approved" || statement?.admin_status === "Paid" ? "green" : "neutral"} />
+        <MetricCard label="Tổng lương" value={formatMoney(amount)} note={`GV ${statement?.teacher_status || "Chưa mở"} · Admin ${statement?.admin_status || "Chưa mở"}`} tone="neutral" />
       </div>
 
       <Panel className="section-gap" title="Xác nhận bảng lương" description="Chỉ xác nhận sau khi đã đối chiếu lịch sử buổi dạy trong tháng.">
@@ -114,20 +121,20 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
       </Panel>
 
       <Panel className="section-gap" title="Lịch sử bảng lương" description="12 kỳ gần nhất">
-        {history?.length ? <div className="table-wrap"><table><thead><tr><th>Tháng</th><th>Teaching</th><th>TA</th><th>Mức lương</th><th>GV xác nhận</th><th>Admin</th></tr></thead><tbody>{history.map((row: any) => <tr key={row.id}><td><Link className="text-link" href={`/payroll?month=${String(row.payroll_month).slice(0, 7)}`}>{monthLabel(String(row.payroll_month).slice(0, 7))}</Link></td><td>{Number(row.teaching_hours || 0).toLocaleString("vi-VN")}h</td><td>{Number(row.ta_hours || 0).toLocaleString("vi-VN")}h</td><td><strong>{formatMoney(row.gross_amount)}</strong></td><td><Status value={row.teacher_status} /></td><td><Status value={row.admin_status} /></td></tr>)}</tbody></table></div> : <Empty title="Chưa có lịch sử lương" description="Bảng lương đầu tiên sẽ xuất hiện sau kỳ chốt tháng." />}
+        {history?.length ? <div className="table-wrap"><table><thead><tr><th>Tháng</th><th>Kèm</th><th>Nhóm</th><th>TA</th><th>Mức lương</th><th>GV xác nhận</th><th>Admin</th></tr></thead><tbody>{history.map((row: any) => <tr key={row.id}><td><Link className="text-link" href={`/payroll?month=${String(row.payroll_month).slice(0, 7)}`}>{monthLabel(String(row.payroll_month).slice(0, 7))}</Link></td><td>{Number(row.tutoring_hours || 0).toLocaleString("vi-VN")}h</td><td>{Number(row.group_hours || 0).toLocaleString("vi-VN")}h</td><td>{Number(row.ta_hours || 0).toLocaleString("vi-VN")}h</td><td><strong>{formatMoney(row.gross_amount)}</strong></td><td><Status value={row.teacher_status} /></td><td><Status value={row.admin_status} /></td></tr>)}</tbody></table></div> : <Empty title="Chưa có lịch sử lương" description="Bảng lương đầu tiên sẽ xuất hiện sau kỳ chốt tháng." />}
       </Panel>
     </>;
   }
 
   const [{ data: teachers }, { data: statements }, { data: liveRows }] = await Promise.all([
     supabase.from("teachers")
-      .select("id,code,full_name,employment_status,teacher_compensation_settings(hourly_rate,ta_hourly_rate,effective_from,note)")
+      .select("id,code,full_name,employment_status,teacher_compensation_settings(hourly_rate,tutoring_hourly_rate,group_hourly_rate,ta_hourly_rate,effective_from,note)")
       .is("archived_at", null).order("full_name"),
     supabase.from("teacher_payroll_statements")
-      .select("id,teacher_id,payroll_month,completed_hours,teaching_hours,ta_hours,hourly_rate_snapshot,ta_hourly_rate_snapshot,teaching_amount,ta_amount,gross_amount,teacher_status,teacher_note,teacher_reviewed_at,admin_status,admin_note,admin_approved_at,expense_transaction_id,teachers(code,full_name)")
+      .select("id,teacher_id,payroll_month,completed_hours,teaching_hours,ta_hours,tutoring_hours,group_hours,hourly_rate_snapshot,tutoring_rate_snapshot,group_rate_snapshot,ta_hourly_rate_snapshot,tutoring_amount,group_amount,teaching_amount,ta_amount,gross_amount,teacher_status,teacher_note,teacher_reviewed_at,admin_status,admin_note,admin_approved_at,expense_transaction_id,teachers(code,full_name)")
       .eq("payroll_month", monthDate).order("created_at"),
     supabase.from("teacher_payroll_live_monthly")
-      .select("teacher_id,completed_hours,hourly_rate,estimated_payroll,teaching_hours,ta_hours,teaching_rate,ta_hourly_rate,teaching_amount,ta_amount")
+      .select("teacher_id,completed_hours,hourly_rate,estimated_payroll,teaching_hours,ta_hours,tutoring_hours,group_hours,teaching_rate,tutoring_rate,group_rate,ta_hourly_rate,tutoring_amount,group_amount,teaching_amount,ta_amount")
       .eq("payroll_month", monthDate)
   ]);
 
@@ -146,19 +153,19 @@ export default async function PayrollPage({ searchParams }: { searchParams: Prom
     <div className="metrics-grid"><MetricCard label="Bảng lương đã tạo" value={statements?.length || 0} /><MetricCard label="Tổng giờ chốt" value={`${totalHours.toLocaleString("vi-VN")}h`} tone="green" /><MetricCard label="Tổng lương dự kiến" value={formatMoney(totalPayroll)} tone="yellow" /><MetricCard label="Chờ Admin duyệt" value={adminPending} note={`${teacherApproved} GV đã xác nhận`} tone={adminPending ? "red" : "neutral"} /></div>
 
     <Panel className="section-gap" title="Đơn giá giờ dạy" description="Đơn giá được cập nhật tại đây và tự động hiển thị trên giao diện của giáo viên.">
-      {teachers?.length ? <div className="rate-settings-grid">{teachers.map((teacher: any) => { const compensation = joined(teacher.teacher_compensation_settings); return <form action={updateTeacherHourlyRate} className="rate-setting-card" key={teacher.id}><input type="hidden" name="teacher_id" value={teacher.id} /><input type="hidden" name="return_month" value={month} /><div><strong>{teacher.full_name}</strong><small>{teacher.code} · {teacher.employment_status}</small></div><Field label="Đơn giá Teaching / giờ" name="hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={Number(compensation?.hourly_rate || 0) || ""} required /><Field label="Đơn giá TA / giờ" name="ta_hourly_rate" type="number" min="0" max="1500000" step="1000" defaultValue={Number(compensation?.ta_hourly_rate || 0) || ""} required /><Field label="Hiệu lực từ" name="effective_from" type="date" defaultValue={compensation?.effective_from || monthDate} required /><Field label="Ghi chú" name="note" defaultValue={compensation?.note || ""} /><button className="button button-primary rate-save-button">Lưu đơn giá</button></form>; })}</div> : <Empty title="Chưa có giáo viên" description="Tạo hồ sơ giáo viên trước khi thiết lập đơn giá." />}
+      {teachers?.length ? <div className="rate-settings-grid rate-card-grid">{teachers.map((teacher: any) => { const compensation = joined(teacher.teacher_compensation_settings); return <form action={updateTeacherHourlyRate} className="rate-setting-card rate-card-setting" key={teacher.id}><input type="hidden" name="teacher_id" value={teacher.id} /><input type="hidden" name="return_month" value={month} /><div className="rate-card-teacher"><strong>{teacher.full_name}</strong><small>{teacher.code} · {teacher.employment_status}</small></div><Field label="Kèm · 1–3 HV / giờ" name="tutoring_hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={Number(compensation?.tutoring_hourly_rate || compensation?.hourly_rate || 0) || ""} required /><Field label="Nhóm · >3 HV / giờ" name="group_hourly_rate" type="number" min="50000" max="1500000" step="1000" defaultValue={Number(compensation?.group_hourly_rate || compensation?.hourly_rate || 0) || ""} required /><Field label="TA / giờ" name="ta_hourly_rate" type="number" min="0" max="1500000" step="1000" defaultValue={Number(compensation?.ta_hourly_rate || 0) || ""} required /><Field label="Hiệu lực từ" name="effective_from" type="date" defaultValue={compensation?.effective_from || monthDate} required /><Field label="Ghi chú" name="note" defaultValue={compensation?.note || ""} /><button className="button button-primary rate-save-button">Lưu Rate Card</button></form>; })}</div> : <Empty title="Chưa có giáo viên" description="Tạo hồ sơ giáo viên trước khi thiết lập Rate Card." />}
     </Panel>
 
     <Panel className="section-gap" title="Duyệt bảng lương" description="Admin chỉ duyệt sau khi giáo viên xác nhận. Khi duyệt, khoản lương tự động nhảy vào bảng chi phí tháng.">
-      {teachers?.length ? <div className="table-wrap"><table><thead><tr><th>Giáo viên</th><th>Teaching</th><th>TA</th><th>Mức lương</th><th>GV xác nhận</th><th>Admin</th><th>Thao tác</th></tr></thead><tbody>{teachers.map((teacher: any) => {
+      {teachers?.length ? <div className="table-wrap payroll-admin-table-wrap"><table className="payroll-admin-table"><thead><tr><th>Giáo viên</th><th>Kèm 1–3</th><th>Nhóm &gt;3</th><th>TA</th><th>Mức lương</th><th>GV xác nhận</th><th>Admin</th><th>Thao tác</th></tr></thead><tbody>{teachers.map((teacher: any) => {
         const row: any = statementMap.get(teacher.id);
         const live: any = liveMap.get(teacher.id);
         const compensation = joined(teacher.teacher_compensation_settings);
         const hours = Number(row?.completed_hours ?? live?.completed_hours ?? 0);
         const rate = Number(row?.hourly_rate_snapshot ?? live?.hourly_rate ?? compensation?.hourly_rate ?? 0);
         const gross = Number(row?.gross_amount ?? live?.estimated_payroll ?? hours * rate);
-        const teachingHours=Number(row?.teaching_hours ?? live?.teaching_hours ?? hours); const taHours=Number(row?.ta_hours ?? live?.ta_hours ?? 0); const teachingRate=Number(row?.hourly_rate_snapshot ?? live?.teaching_rate ?? rate); const taRate=Number(row?.ta_hourly_rate_snapshot ?? live?.ta_hourly_rate ?? compensation?.ta_hourly_rate ?? 0); const teachingAmount=Number(row?.teaching_amount ?? live?.teaching_amount ?? teachingHours*teachingRate); const taAmount=Number(row?.ta_amount ?? live?.ta_amount ?? taHours*taRate);
-        return <tr key={teacher.id}><td><strong>{teacher.full_name}</strong><br/><span className="muted">{teacher.code}</span></td><td><strong>{teachingHours.toLocaleString("vi-VN")}h</strong><br/><span className="muted">{formatMoney(teachingRate)}/h</span></td><td><strong>{taHours.toLocaleString("vi-VN")}h</strong><br/><span className="muted">{formatMoney(taRate)}/h</span></td><td><strong>{formatMoney(gross)}</strong><br/><span className="muted">Teaching {formatMoney(teachingAmount)} · TA {formatMoney(taAmount)}</span></td><td>{row ? <><Status value={row.teacher_status} />{row.teacher_note ? <small className="payroll-note">{row.teacher_note}</small> : null}</> : <Status value="Chưa tạo" />}</td><td>{row ? <Status value={row.admin_status} /> : <Status value="Chưa tạo" />}</td><td>{!row ? <span className="muted">Bấm Tổng kết tháng</span> : row.admin_status === "Pending" && row.teacher_status === "Approved" ? <form action={adminApproveTeacherPayroll}><input type="hidden" name="statement_id" value={row.id} /><input type="hidden" name="return_month" value={month} /><button className="button button-primary button-small">Duyệt & ghi chi phí</button></form> : row.admin_status === "Approved" ? <form action={adminMarkTeacherPayrollPaid}><input type="hidden" name="statement_id" value={row.id} /><input type="hidden" name="return_month" value={month} /><button className="button button-secondary button-small">Đánh dấu đã trả</button></form> : row.teacher_status === "Disputed" ? <span className="status status-red">Cần kiểm tra</span> : <span className="muted">Chờ GV xác nhận</span>}</td></tr>;
+        const teachingHours=Number(row?.teaching_hours ?? live?.teaching_hours ?? hours); const taHours=Number(row?.ta_hours ?? live?.ta_hours ?? 0); const teachingRate=Number(row?.hourly_rate_snapshot ?? live?.teaching_rate ?? rate); const taRate=Number(row?.ta_hourly_rate_snapshot ?? live?.ta_hourly_rate ?? compensation?.ta_hourly_rate ?? 0); const teachingAmount=Number(row?.teaching_amount ?? live?.teaching_amount ?? teachingHours*teachingRate); const taAmount=Number(row?.ta_amount ?? live?.ta_amount ?? taHours*taRate); const tutoringHours=Number(row?.tutoring_hours ?? live?.tutoring_hours ?? 0); const groupHours=Number(row?.group_hours ?? live?.group_hours ?? 0); const tutoringRate=Number(row?.tutoring_rate_snapshot ?? live?.tutoring_rate ?? compensation?.tutoring_hourly_rate ?? compensation?.hourly_rate ?? 0); const groupRate=Number(row?.group_rate_snapshot ?? live?.group_rate ?? compensation?.group_hourly_rate ?? compensation?.hourly_rate ?? 0); const tutoringAmount=Number(row?.tutoring_amount ?? live?.tutoring_amount ?? tutoringHours*tutoringRate); const groupAmount=Number(row?.group_amount ?? live?.group_amount ?? groupHours*groupRate);
+        return <tr key={teacher.id}><td><strong>{teacher.full_name}</strong><br/><span className="muted">{teacher.code}</span></td><td><strong>{tutoringHours.toLocaleString("vi-VN")}h</strong><br/><span className="muted">{formatMoney(tutoringRate)}/h · {formatMoney(tutoringAmount)}</span></td><td><strong>{groupHours.toLocaleString("vi-VN")}h</strong><br/><span className="muted">{formatMoney(groupRate)}/h · {formatMoney(groupAmount)}</span></td><td><strong>{taHours.toLocaleString("vi-VN")}h</strong><br/><span className="muted">{formatMoney(taRate)}/h · {formatMoney(taAmount)}</span></td><td><strong>{formatMoney(gross)}</strong><br/><span className="muted">Kèm {formatMoney(tutoringAmount)} · Nhóm {formatMoney(groupAmount)} · TA {formatMoney(taAmount)}</span></td><td>{row ? <><Status value={row.teacher_status} />{row.teacher_note ? <small className="payroll-note">{row.teacher_note}</small> : null}</> : <Status value="Chưa tạo" />}</td><td>{row ? <Status value={row.admin_status} /> : <Status value="Chưa tạo" />}</td><td><div className="payroll-row-actions"><Link className="button button-ghost button-small" href={`/payroll/timesheet?month=${month}&teacher_id=${teacher.id}`}>Bảng công</Link><Link className="button button-ghost button-small" href={`/payroll/slip?month=${month}&teacher_id=${teacher.id}`}>Phiếu lương</Link><Link className="button button-ghost button-small" href={`/workforce/kpi?month=${month}&teacher_id=${teacher.id}`}>KPI</Link>{!row ? <span className="muted">Bấm Tổng kết tháng</span> : row.admin_status === "Pending" && row.teacher_status === "Approved" ? <form action={adminApproveTeacherPayroll}><input type="hidden" name="statement_id" value={row.id} /><input type="hidden" name="return_month" value={month} /><button className="button button-primary button-small">Duyệt & ghi chi phí</button></form> : row.admin_status === "Approved" ? <form action={adminMarkTeacherPayrollPaid}><input type="hidden" name="statement_id" value={row.id} /><input type="hidden" name="return_month" value={month} /><button className="button button-secondary button-small">Đánh dấu đã trả</button></form> : row.teacher_status === "Disputed" ? <span className="status status-red">Cần kiểm tra</span> : <span className="muted">Chờ GV xác nhận</span>}</div></td></tr>;
       })}</tbody></table></div> : <Empty title="Chưa có giáo viên" description="Không có dữ liệu để tổng kết lương." />}
     </Panel>
   </>;
