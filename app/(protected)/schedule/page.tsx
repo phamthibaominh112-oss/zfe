@@ -273,7 +273,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <MetricCard label="Online / Offline" value={`${onlineCount} / ${offlineCount}`} tone="neutral" />
     </div>
 
-    <section className="calendar-shell">
+    <section className={`calendar-shell ${!canManage ? "calendar-shell-compact" : ""}`}>
       <div className="week-toolbar calendar-toolbar">
         <a className="button button-ghost" href={scheduleHref(safeOffset-1)}>← Tuần trước</a>
         <div className="week-title"><strong>{formatDate(start)} – {formatDate(end)}</strong><span>{safeOffset === 0 ? "Tuần hiện tại" : safeOffset > 0 ? `Sau ${safeOffset} tuần` : `Trước ${Math.abs(safeOffset)} tuần`}</span></div>

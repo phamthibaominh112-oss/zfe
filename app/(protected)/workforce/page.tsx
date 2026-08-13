@@ -1,14 +1,18 @@
 import Link from "next/link";
 import {
   adminApproveStaffPayroll,
+  adminApproveTeacherOverrideRequest,
   adminMarkStaffPayrollPaid,
   adminOverrideStaffCheckin,
   adminOverrideTeacherCheckin,
+  adminRejectTeacherOverrideRequest,
+  cancelTeacherCheckinOverrideRequest,
   createStaffWorkSchedule,
   generateStaffPayrollMonth,
   staffReviewPayroll,
   staffWorkCheckIn,
   staffWorkCheckOut,
+  requestTeacherCheckinOverride,
   teacherSessionCheckIn,
   teacherSessionCheckOut,
   updateStaffHourlyRate
@@ -55,16 +59,31 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
     const { data: teacher } = await supabase.from("teachers").select("id,code,full_name").eq("user_id", profile.id).maybeSingle();
     if (!teacher) return <><PageHeader eyebrow="Chấm công giảng dạy" title="Chưa có hồ sơ giáo viên" description="Tài khoản chưa được liên kết với hồ sơ giáo viên." /></>;
 
-    const [{ data: sessionRows }, { data: kpiLive }, { data: kpiSnapshot }, { data: payrollLive }] = await Promise.all([
+    const monthStart=`${month}-01`;
+    const monthNextDate=new Date(`${monthStart}T00:00:00+07:00`); monthNextDate.setMonth(monthNextDate.getMonth()+1);
+    const monthNext=dateOnlyString(monthNextDate);
+    const [{ data: sessionRows }, { data: kpiLive }, { data: kpiSnapshot }, { data: payrollLive }, { data: monthSessionRows }, { data: overrideRequests }] = await Promise.all([
       supabase.from("teacher_session_compliance")
         .select("session_id,class_code,session_no,scheduled_date,start_time,end_time,duration_hours,session_status,teacher_role,check_in_at,check_out_at,late_minutes,payroll_eligible,punctual,assignment_published_at,assignment_compliant")
         .eq("teacher_id", teacher.id).gte("scheduled_date", weekStart).lte("scheduled_date", weekEnd).order("scheduled_date").order("start_time"),
       supabase.from("teacher_kpi_live_monthly").select("*").eq("teacher_id", teacher.id).eq("kpi_month", monthDate).maybeSingle(),
       supabase.from("teacher_kpi_snapshots").select("*").eq("teacher_id", teacher.id).eq("kpi_month", monthDate).maybeSingle(),
-      supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", monthDate).maybeSingle()
+      supabase.from("teacher_payroll_live_monthly").select("completed_hours,hourly_rate,estimated_payroll").eq("teacher_id", teacher.id).eq("payroll_month", monthDate).maybeSingle(),
+      supabase.from("teacher_session_compliance")
+        .select("session_id,class_code,session_no,scheduled_date,start_time,end_time,duration_hours,session_status,teacher_role,check_in_at,check_out_at,late_minutes,payroll_eligible")
+        .eq("teacher_id",teacher.id).gte("scheduled_date",monthStart).lt("scheduled_date",monthNext).lte("scheduled_date",today)
+        .order("scheduled_date",{ascending:false}).order("start_time",{ascending:false}),
+      supabase.from("teacher_checkin_override_requests")
+        .select("id,session_id,requested_check_in_at,requested_check_out_at,reason,status,admin_note,created_at,reviewed_at")
+        .eq("teacher_id",teacher.id).order("created_at",{ascending:false}).limit(50)
     ]);
     const kpi = kpiSnapshot || kpiLive;
     const todaySessions = (sessionRows || []).filter((row: any) => row.scheduled_date === today);
+    const requestBySession=new Map<string,any>();
+    for(const req of overrideRequests||[]){
+      if(!requestBySession.has(req.session_id)) requestBySession.set(req.session_id,req);
+    }
+    const pastSessions=(monthSessionRows||[]).filter((row:any)=>row.scheduled_date<today).slice(0,30);
     const eligibleHours = Number(payrollLive?.completed_hours || 0);
 
     return <>
@@ -93,6 +112,18 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
             {row.check_out_at ? <Status value="Completed"/> : null}
           </div>
         </article>)}</div> : <Empty title="Hôm nay chưa có buổi dạy" description="Kiểm tra Lịch dạy để xem các session trong tuần." />}
+      </Panel>
+
+      <Panel className="section-gap" title={`Buổi đã qua · ${monthLabel(month)}`} description="Xem lại session cũ. Nếu Check-in/Check-out bị thiếu do lỗi kỹ thuật, gửi yêu cầu để Admin duyệt override.">
+        {pastSessions.length ? <div className="past-session-list">{pastSessions.map((row:any)=>{const req=requestBySession.get(row.session_id);const complete=!!row.check_in_at&&!!row.check_out_at;return <article className={`past-session-card ${complete?"complete":"needs-action"}`} key={row.session_id}>
+          <div className="past-session-main"><span>{formatDate(row.scheduled_date)} · {row.start_time?.slice(0,5)}–{row.end_time?.slice(0,5)}</span><strong>{row.class_code} · Buổi {row.session_no}</strong><small>{row.teacher_role==="Assistant"?"TA / Co-teacher":"Teaching"} · {Number(row.duration_hours||0).toLocaleString("vi-VN")}h</small></div>
+          <div className="past-session-clock"><span>Check-in</span><strong>{row.check_in_at?formatDateTime(row.check_in_at):"Thiếu"}</strong><span>Check-out</span><strong>{row.check_out_at?formatDateTime(row.check_out_at):"Thiếu"}</strong></div>
+          <div className="past-session-status">{complete?<Status value={row.payroll_eligible?"Đủ điều kiện lương":"Đã ghi nhận"}/>:req?<><Status value={req.status}/><small>{req.status==="Rejected"&&req.admin_note?`Admin: ${req.admin_note}`:req.reason}</small></>:<Status value="Cần xử lý"/>}</div>
+          <div className="past-session-actions">
+            {!complete && (!req || ["Rejected","Cancelled"].includes(req.status)) ? <details className="inline-details override-request-details"><summary className="button button-secondary button-small">Yêu cầu override</summary><form action={requestTeacherCheckinOverride} className="form-stack"><input type="hidden" name="session_id" value={row.session_id}/><Field label="Check-in thực tế" name="requested_check_in_at" type="datetime-local" required defaultValue={`${row.scheduled_date}T${row.start_time?.slice(0,5)}`}/><Field label="Check-out thực tế" name="requested_check_out_at" type="datetime-local" defaultValue={`${row.scheduled_date}T${row.end_time?.slice(0,5)}`}/><TextAreaField label="Lý do / technical issue" name="reason" required placeholder="Ví dụ: lỗi mạng, nút Check-in không hoạt động, portal unavailable..."/><button className="button button-primary">Gửi Admin duyệt</button></form></details> : null}
+            {req?.status==="Pending"?<form action={cancelTeacherCheckinOverrideRequest}><input type="hidden" name="request_id" value={req.id}/><button className="button button-ghost button-small">Hủy yêu cầu</button></form>:null}
+          </div>
+        </article>})}</div> : <Empty title="Chưa có buổi đã qua trong tháng" description="Session cũ của tháng được chọn sẽ hiển thị tại đây."/>}
       </Panel>
 
       <Panel className="section-gap" title={`KPI tuân thủ · ${monthLabel(month)}`} description="Tự động tính từ dữ liệu portal, không nhập tay." action={<Link className="text-link" href={`/workforce/kpi?month=${month}`}>Chi tiết & lưu PDF →</Link>}>
@@ -138,12 +169,13 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
     </>;
   }
 
-  const [{ data: staff }, { data: schedules }, { data: liveRows }, { data: statements }, { data: teacherSessions }] = await Promise.all([
+  const [{ data: staff }, { data: schedules }, { data: liveRows }, { data: statements }, { data: teacherSessions }, { data: pendingOverrideRequests }] = await Promise.all([
     supabase.from("profiles").select("id,full_name,role,is_active,staff_compensation_settings(hourly_rate,effective_from,note)").in("role", ["academic_manager","customer_service"]).eq("is_active", true).order("full_name"),
     supabase.from("staff_work_schedules").select("id,user_id,role,work_date,start_time,end_time,work_mode,location,status,profiles(full_name,role),staff_work_logs(check_in_at,check_out_at,late_minutes,status)").gte("work_date", weekStart).lte("work_date", weekEnd).order("work_date").order("start_time"),
     supabase.from("staff_work_live_monthly").select("user_id,full_name,role,worked_hours,completed_shifts,punctual_shifts,hourly_rate,estimated_payroll").eq("work_month", monthDate),
     supabase.from("staff_payroll_statements").select("id,user_id,role,worked_hours,hourly_rate_snapshot,gross_amount,employee_status,employee_note,admin_status,expense_transaction_id,profiles(full_name)").eq("payroll_month", monthDate),
-    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,classes(code,name),session_teachers(teacher_id,role,teachers(id,code,full_name),teacher_session_checkins(check_in_at,check_out_at,status,adjustment_note))").gte("scheduled_date",weekStart).lte("scheduled_date",weekEnd).neq("status","Cancelled").is("archived_at",null).order("scheduled_date").order("start_time")
+    supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,classes(code,name),session_teachers(teacher_id,role,teachers(id,code,full_name),teacher_session_checkins(check_in_at,check_out_at,status,adjustment_note))").gte("scheduled_date",weekStart).lte("scheduled_date",weekEnd).neq("status","Cancelled").is("archived_at",null).order("scheduled_date").order("start_time"),
+    supabase.from("teacher_checkin_override_requests").select("id,session_id,teacher_id,requested_check_in_at,requested_check_out_at,reason,status,created_at,teachers(code,full_name),sessions(session_no,scheduled_date,start_time,end_time,classes(code,name))").eq("status","Pending").order("created_at")
   ]);
   const liveMap=new Map((liveRows||[]).map((row:any)=>[row.user_id,row]));
   const statementMap=new Map((statements||[]).map((row:any)=>[row.user_id,row]));
@@ -163,6 +195,10 @@ export default async function WorkforcePage({ searchParams }: { searchParams: Pr
 
     <Panel className="section-gap" title="Lịch làm tuần này" description={`${formatDate(weekStart)} – ${formatDate(weekEnd)} · Admin xem toàn bộ Academic và CSKH`}>
       {schedules?.length ? <div className="table-wrap"><table><thead><tr><th>Nhân sự</th><th>Ngày</th><th>Ca</th><th>Check-in</th><th>Check-out</th><th>Trễ</th><th>Admin override</th></tr></thead><tbody>{schedules.map((row:any)=>{ const p=joined(row.profiles); const log=joined(row.staff_work_logs); return <tr key={row.id}><td><strong>{p?.full_name||"—"}</strong><br/><span className="muted">{p?.role==="academic_manager"?"Academic":"CSKH"}</span></td><td>{formatDate(row.work_date)}</td><td>{row.start_time?.slice(0,5)}–{row.end_time?.slice(0,5)}<br/><span className="muted">{row.work_mode} · {row.location||"—"}</span></td><td>{formatDateTime(log?.check_in_at)}</td><td>{formatDateTime(log?.check_out_at)}</td><td>{log?.late_minutes ? `${log.late_minutes} phút` : log?.check_in_at ? "Đúng giờ" : "—"}</td><td><details className="inline-details admin-override-details"><summary className="button button-secondary button-small">Override</summary><form action={adminOverrideStaffCheckin} className="form-stack"><input type="hidden" name="schedule_id" value={row.id}/><Field label="Check-in" name="check_in_at" type="datetime-local" required defaultValue={log?.check_in_at?new Date(log.check_in_at).toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,16):`${row.work_date}T${row.start_time?.slice(0,5)}`}/><Field label="Check-out" name="check_out_at" type="datetime-local" defaultValue={log?.check_out_at?new Date(log.check_out_at).toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,16):""}/><TextAreaField label="Lý do technical issue / override" name="reason" required defaultValue={log?.adjustment_note||""}/><button className="button button-primary">Lưu override</button></form></details></td></tr>;})}</tbody></table></div> : <Empty title="Chưa có lịch làm tuần này" description="Nhân sự có thể tự đăng ký hoặc Admin xếp lịch."/>}
+    </Panel>
+
+    <Panel className="section-gap" title={`Yêu cầu override đang chờ · ${(pendingOverrideRequests||[]).length}`} description="GV gửi yêu cầu khi bỏ lỡ Check-in/Check-out do lỗi kỹ thuật. Admin kiểm tra rồi Approve hoặc Reject.">
+      {(pendingOverrideRequests||[]).length ? <div className="override-approval-list">{(pendingOverrideRequests||[]).map((req:any)=>{const t=joined(req.teachers);const ses=joined(req.sessions);const cl=joined(ses?.classes);return <article className="override-approval-card" key={req.id}><div><span>{formatDate(ses?.scheduled_date)} · {ses?.start_time?.slice(0,5)}–{ses?.end_time?.slice(0,5)}</span><strong>{t?.code} · {t?.full_name}</strong><small>{cl?.code} · Buổi {ses?.session_no}</small></div><div className="override-request-times"><span>Xin Check-in</span><strong>{formatDateTime(req.requested_check_in_at)}</strong><span>Xin Check-out</span><strong>{formatDateTime(req.requested_check_out_at)}</strong></div><div className="override-request-reason"><span>Lý do</span><p>{req.reason}</p></div><div className="override-approval-actions"><form action={adminApproveTeacherOverrideRequest} className="form-stack"><input type="hidden" name="request_id" value={req.id}/><Field label="Admin note (optional)" name="admin_note"/><button className="button button-primary">✓ Approve & áp dụng</button></form><form action={adminRejectTeacherOverrideRequest} className="form-stack"><input type="hidden" name="request_id" value={req.id}/><TextAreaField label="Lý do reject" name="admin_note" required/><button className="button button-danger">Reject</button></form></div></article>})}</div> : <Empty title="Không có yêu cầu chờ duyệt" description="Khi GV gửi yêu cầu override, request sẽ xuất hiện ở đây."/>}
     </Panel>
 
     <Panel className="section-gap" title="Admin override chấm công giáo viên" description="Dùng khi lỗi kỹ thuật. Mọi override lưu lý do và người điều chỉnh."><div className="admin-teacher-override-list">{(teacherSessions||[]).flatMap((session:any)=>(session.session_teachers||[]).map((link:any)=>{const teacher=joined(link.teachers);const log=joined(link.teacher_session_checkins);return <div className="admin-teacher-override-row" key={`${session.id}-${link.teacher_id}`}><div><strong>{session.classes?.code} · Buổi {session.session_no}</strong><span>{formatDate(session.scheduled_date)} · {session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {teacher?.full_name} · {link.role==="Assistant"?"TA":"Teaching"}</span></div><div><small>IN: {formatDateTime(log?.check_in_at)}</small><small>OUT: {formatDateTime(log?.check_out_at)}</small></div><details className="inline-details admin-override-details"><summary className="button button-secondary button-small">Override</summary><form action={adminOverrideTeacherCheckin} className="form-stack"><input type="hidden" name="session_id" value={session.id}/><input type="hidden" name="teacher_id" value={link.teacher_id}/><Field label="Check-in" name="check_in_at" type="datetime-local" required defaultValue={log?.check_in_at?new Date(log.check_in_at).toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,16):`${session.scheduled_date}T${session.start_time?.slice(0,5)}`}/><Field label="Check-out" name="check_out_at" type="datetime-local" defaultValue={log?.check_out_at?new Date(log.check_out_at).toLocaleString("sv-SE",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,16):""}/><TextAreaField label="Lý do technical issue / override" name="reason" required defaultValue={log?.adjustment_note||""}/><button className="button button-primary">Lưu override GV</button></form></details></div>; } ))}</div></Panel>

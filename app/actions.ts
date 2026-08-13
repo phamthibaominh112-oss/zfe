@@ -2095,6 +2095,86 @@ export async function createStaffWorkSchedule(formData: FormData) {
   go("/workforce", "Đã đăng ký lịch làm.");
 }
 
+export async function requestTeacherCheckinOverride(formData: FormData) {
+  const profile=await requireRole(["teacher"]);
+  const supabase=await createClient();
+
+  const {data:teacher,error:teacherError}=await supabase
+    .from("teachers").select("id").eq("user_id",profile.id).maybeSingle();
+  if(teacherError||!teacher) go("/workforce",undefined,teacherError?.message||"Không tìm thấy hồ sơ giáo viên.");
+
+  const sessionId=text(formData.get("session_id"));
+  const checkInIso=vietnamLocalDateTimeIso(text(formData.get("requested_check_in_at")));
+  const checkOutRaw=text(formData.get("requested_check_out_at"));
+  const checkOutIso=checkOutRaw?vietnamLocalDateTimeIso(checkOutRaw):null;
+  const reason=text(formData.get("reason"));
+
+  if(!sessionId||!checkInIso||!reason) go("/workforce",undefined,"Vui lòng nhập giờ Check-in và lý do.");
+  if(checkOutRaw&&!checkOutIso) go("/workforce",undefined,"Giờ Check-out không hợp lệ.");
+  if(checkOutIso&&new Date(checkOutIso).getTime()<new Date(checkInIso).getTime()) {
+    go("/workforce",undefined,"Check-out không thể trước Check-in.");
+  }
+
+  const {error}=await supabase.from("teacher_checkin_override_requests").insert({
+    session_id:sessionId,
+    teacher_id:teacher.id,
+    requested_by:profile.id,
+    requested_check_in_at:checkInIso,
+    requested_check_out_at:checkOutIso,
+    reason,
+    status:"Pending"
+  });
+  if(error){
+    const msg=error.message.includes("uq_teacher_override_request_pending")
+      ? "Buổi này đã có yêu cầu override đang chờ Admin duyệt."
+      : error.message;
+    go("/workforce",undefined,msg);
+  }
+
+  revalidatePath("/workforce");
+  go("/workforce","Đã gửi yêu cầu override cho Admin.");
+}
+
+export async function cancelTeacherCheckinOverrideRequest(formData: FormData) {
+  const profile=await requireRole(["teacher"]);
+  const supabase=await createClient();
+  const requestId=text(formData.get("request_id"));
+  const {error}=await supabase.from("teacher_checkin_override_requests")
+    .update({status:"Cancelled",updated_at:new Date().toISOString()})
+    .eq("id",requestId).eq("requested_by",profile.id).eq("status","Pending");
+  if(error) go("/workforce",undefined,error.message);
+  revalidatePath("/workforce");
+  go("/workforce","Đã hủy yêu cầu override.");
+}
+
+export async function adminApproveTeacherOverrideRequest(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const requestId=text(formData.get("request_id"));
+  const {error}=await supabase.rpc("admin_approve_teacher_override_request",{
+    p_request_id:requestId,
+    p_admin_note:text(formData.get("admin_note"))||null
+  });
+  if(error) go("/workforce",undefined,error.message);
+  revalidatePath("/workforce"); revalidatePath("/dashboard"); revalidatePath("/payroll");
+  go("/workforce","Đã approve yêu cầu và cập nhật Check-in/Check-out.");
+}
+
+export async function adminRejectTeacherOverrideRequest(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const requestId=text(formData.get("request_id"));
+  const note=text(formData.get("admin_note"));
+  if(!note) go("/workforce",undefined,"Vui lòng nhập lý do từ chối.");
+  const {error}=await supabase.rpc("admin_reject_teacher_override_request",{
+    p_request_id:requestId,
+    p_admin_note:note
+  });
+  if(error) go("/workforce",undefined,error.message);
+  revalidatePath("/workforce");
+  go("/workforce","Đã từ chối yêu cầu override.");
+}
+
 export async function adminOverrideTeacherCheckin(formData: FormData) {
   await requireRole(["admin"]);
   const supabase=await createClient();
