@@ -24,6 +24,18 @@ function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
+function vietnamLocalDateTimeIso(rawValue: string) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return null;
+  let normalized = raw;
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(raw)) {
+    normalized = raw.length === 16 ? `${raw}:00+07:00` : `${raw}+07:00`;
+  }
+  const date = new Date(normalized);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString();
+}
+
 function scheduleReturnPath(formData: FormData) {
   const params = new URLSearchParams();
   const week = text(formData.get("return_week"));
@@ -967,6 +979,91 @@ export async function createAssignment(formData: FormData) {
     : "Đã tạo assignment.");
 }
 
+export async function updateAssignment(formData: FormData) {
+  const profile = await requireRole(["admin","academic_manager","teacher"]);
+  const supabase = await createClient();
+  const assignmentId = text(formData.get("assignment_id"));
+
+  const { data: current, error: fetchError } = await supabase
+    .from("assignments")
+    .select("id,class_id,session_id,created_by,material_path")
+    .eq("id",assignmentId)
+    .is("archived_at",null)
+    .single();
+  if (fetchError || !current) go("/academic",undefined,fetchError?.message||"Không tìm thấy assignment.");
+
+  if (profile.role==="teacher" && current.created_by!==profile.id) {
+    go("/academic",undefined,"GV chỉ được sửa assignment do chính mình tạo.");
+  }
+
+  const { error } = await supabase.from("assignments").update({
+    title:text(formData.get("title")),
+    instructions:text(formData.get("instructions")),
+    due_at:text(formData.get("due_at"))||null,
+    max_score:toNumber(formData.get("max_score"),100),
+    published_at:formData.get("publish")==="on"
+      ? (text(formData.get("published_at")) || new Date().toISOString())
+      : null,
+    updated_at:new Date().toISOString()
+  }).eq("id",assignmentId);
+  if(error) go("/academic",undefined,error.message);
+
+  const material=formData.get("material_file");
+  if(material instanceof File && material.size>0){
+    if(material.size>20*1024*1024) go("/academic",undefined,"File giao BTVN tối đa 20MB.");
+    const safeName=material.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=`${assignmentId}/${Date.now()}-${safeName}`;
+    const {error:uploadError}=await supabase.storage.from("assignment-materials").upload(path,material,{upsert:false,contentType:material.type||undefined});
+    if(uploadError) go("/academic",undefined,`Không upload được file mới: ${uploadError.message}`);
+
+    const {error:updateMaterialError}=await supabase.from("assignments").update({
+      material_path:path,material_name:material.name,material_mime:material.type||null,
+      material_size:material.size,updated_at:new Date().toISOString()
+    }).eq("id",assignmentId);
+    if(updateMaterialError) go("/academic",undefined,updateMaterialError.message);
+
+    if(current.material_path && current.material_path!==path){
+      await supabase.storage.from("assignment-materials").remove([current.material_path]);
+    }
+  }
+
+  revalidatePath("/academic"); revalidatePath("/dashboard");
+  go("/academic","Đã cập nhật assignment.");
+}
+
+export async function archiveAssignment(formData: FormData) {
+  const profile=await requireRole(["admin","academic_manager","teacher"]);
+  const supabase=await createClient();
+  const assignmentId=text(formData.get("assignment_id"));
+  const reason=text(formData.get("reason"));
+  if(!reason) go("/academic",undefined,"Vui lòng nhập lý do xóa/ẩn assignment.");
+
+  const {data:row,error:fetchError}=await supabase.from("assignments")
+    .select("id,created_by").eq("id",assignmentId).is("archived_at",null).single();
+  if(fetchError||!row) go("/academic",undefined,fetchError?.message||"Không tìm thấy assignment.");
+  if(profile.role==="teacher"&&row.created_by!==profile.id) go("/academic",undefined,"GV chỉ được xóa assignment do chính mình tạo.");
+
+  const {error}=await supabase.from("assignments").update({
+    archived_at:new Date().toISOString(),archived_by:profile.id,updated_at:new Date().toISOString()
+  }).eq("id",assignmentId);
+  if(error) go("/academic",undefined,error.message);
+
+  revalidatePath("/academic"); revalidatePath("/dashboard");
+  go("/academic",`Đã xóa/ẩn assignment khỏi portal. Lý do: ${reason}`);
+}
+
+export async function restoreAssignment(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const assignmentId=text(formData.get("assignment_id"));
+  const {error}=await supabase.from("assignments").update({
+    archived_at:null,archived_by:null,updated_at:new Date().toISOString()
+  }).eq("id",assignmentId);
+  if(error) go("/academic",undefined,error.message);
+  revalidatePath("/academic"); revalidatePath("/dashboard");
+  go("/academic","Admin đã khôi phục assignment.");
+}
+
 export async function submitAssignment(formData: FormData) {
   const profile = await requireRole(["student"]);
   const supabase = await createClient();
@@ -1625,6 +1722,37 @@ export async function updatePayment(formData: FormData) {
   go("/finance", "Đã điều chỉnh payment transaction và tái tính công nợ.");
 }
 
+export async function updateReceiptDetails(formData: FormData) {
+  await requireRole(["admin","customer_service"]);
+  const supabase=await createClient();
+  const paymentId=text(formData.get("payment_id"));
+  const {error}=await supabase.from("payment_receipts").update({
+    payer_name:text(formData.get("payer_name")),
+    package_name:text(formData.get("package_name")),
+    payment_method:text(formData.get("payment_method"))||null,
+    reference:text(formData.get("reference"))||null,
+    note:text(formData.get("note"))||null,
+    updated_at:new Date().toISOString()
+  }).eq("payment_transaction_id",paymentId);
+  if(error) go("/finance",undefined,error.message);
+  revalidatePath("/finance"); revalidatePath(`/finance/receipts/${paymentId}`);
+  go("/finance","Đã cập nhật nội dung phiếu thu.");
+}
+
+export async function deletePaymentAndReceipt(formData: FormData) {
+  await requireRole(["admin","customer_service"]);
+  const supabase=await createClient();
+  const paymentId=text(formData.get("payment_id"));
+  const reason=text(formData.get("reason"));
+  if(!reason) go("/finance",undefined,"Vui lòng ghi lý do xóa phiếu thu / giao dịch.");
+  const {error}=await supabase.rpc("delete_payment_and_receipt",{
+    p_payment_id:paymentId,p_reason:reason
+  });
+  if(error) go("/finance",undefined,error.message);
+  revalidatePath("/finance"); revalidatePath("/finance/reports"); revalidatePath("/dashboard");
+  go("/finance","Đã xóa phiếu thu và giao dịch. Doanh thu/công nợ đã tự tính lại.");
+}
+
 export async function updateRenewalFollowup(formData: FormData) {
   await requireRole(["admin", "customer_service"]);
   const supabase = await createClient();
@@ -1968,41 +2096,41 @@ export async function createStaffWorkSchedule(formData: FormData) {
 }
 
 export async function adminOverrideTeacherCheckin(formData: FormData) {
-  const profile=await requireRole(["admin"]);
-  const admin=createAdminClient();
-  const sessionId=text(formData.get("session_id")), teacherId=text(formData.get("teacher_id"));
-  const checkInAt=text(formData.get("check_in_at")), checkOutAt=text(formData.get("check_out_at")), reason=text(formData.get("reason"));
-  if(!sessionId||!teacherId||!checkInAt||!reason) go("/workforce",undefined,"Thiếu thông tin override GV.");
-  if(checkOutAt&&new Date(checkOutAt).getTime()<new Date(checkInAt).getTime()) go("/workforce",undefined,"Check-out không thể trước Check-in.");
-  const {data:session,error:sessionError}=await admin.from("sessions").select("scheduled_date,start_time").eq("id",sessionId).single();
-  if(sessionError||!session) go("/workforce",undefined,sessionError?.message||"Không tìm thấy session.");
-  const scheduledStart=new Date(`${session.scheduled_date}T${String(session.start_time).slice(0,8)}+07:00`);
-  const lateMinutes=Math.max(0,Math.round((new Date(checkInAt).getTime()-scheduledStart.getTime())/60000));
-  const {error}=await admin.from("teacher_session_checkins").upsert({
-    session_id:sessionId,teacher_id:teacherId,check_in_at:new Date(checkInAt).toISOString(),
-    check_out_at:checkOutAt?new Date(checkOutAt).toISOString():null,late_minutes:lateMinutes,early_checkout_minutes:0,
-    status:"Adjusted",adjustment_note:reason,adjusted_by:profile.id,updated_at:new Date().toISOString()
-  },{onConflict:"session_id,teacher_id"});
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const checkInIso=vietnamLocalDateTimeIso(text(formData.get("check_in_at")));
+  const checkOutRaw=text(formData.get("check_out_at"));
+  const checkOutIso=checkOutRaw?vietnamLocalDateTimeIso(checkOutRaw):null;
+  if(!checkInIso) go("/workforce",undefined,"Check-in không hợp lệ.");
+  if(checkOutRaw&&!checkOutIso) go("/workforce",undefined,"Check-out không hợp lệ.");
+
+  const {error}=await supabase.rpc("admin_override_teacher_checkin",{
+    p_session_id:text(formData.get("session_id")),
+    p_teacher_id:text(formData.get("teacher_id")),
+    p_check_in_at:checkInIso,
+    p_check_out_at:checkOutIso,
+    p_reason:text(formData.get("reason"))
+  });
   if(error) go("/workforce",undefined,error.message);
   revalidatePath("/workforce"); revalidatePath("/dashboard"); revalidatePath("/payroll");
   go("/workforce","Admin đã override Check-in/Check-out của giáo viên.");
 }
 
 export async function adminOverrideStaffCheckin(formData: FormData) {
-  const profile=await requireRole(["admin"]);
-  const admin=createAdminClient();
-  const scheduleId=text(formData.get("schedule_id")), checkInAt=text(formData.get("check_in_at")), checkOutAt=text(formData.get("check_out_at")), reason=text(formData.get("reason"));
-  if(!scheduleId||!checkInAt||!reason) go("/workforce",undefined,"Thiếu thông tin override nhân sự.");
-  if(checkOutAt&&new Date(checkOutAt).getTime()<new Date(checkInAt).getTime()) go("/workforce",undefined,"Check-out không thể trước Check-in.");
-  const {data:schedule,error:scheduleError}=await admin.from("staff_work_schedules").select("id,user_id,work_date,start_time").eq("id",scheduleId).single();
-  if(scheduleError||!schedule) go("/workforce",undefined,scheduleError?.message||"Không tìm thấy ca làm.");
-  const scheduledStart=new Date(`${schedule.work_date}T${String(schedule.start_time).slice(0,8)}+07:00`);
-  const lateMinutes=Math.max(0,Math.round((new Date(checkInAt).getTime()-scheduledStart.getTime())/60000));
-  const {error}=await admin.from("staff_work_logs").upsert({
-    schedule_id:scheduleId,user_id:schedule.user_id,check_in_at:new Date(checkInAt).toISOString(),
-    check_out_at:checkOutAt?new Date(checkOutAt).toISOString():null,late_minutes:lateMinutes,status:"Adjusted",
-    adjustment_note:reason,adjusted_by:profile.id,updated_at:new Date().toISOString()
-  },{onConflict:"schedule_id"});
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const checkInIso=vietnamLocalDateTimeIso(text(formData.get("check_in_at")));
+  const checkOutRaw=text(formData.get("check_out_at"));
+  const checkOutIso=checkOutRaw?vietnamLocalDateTimeIso(checkOutRaw):null;
+  if(!checkInIso) go("/workforce",undefined,"Check-in không hợp lệ.");
+  if(checkOutRaw&&!checkOutIso) go("/workforce",undefined,"Check-out không hợp lệ.");
+
+  const {error}=await supabase.rpc("admin_override_staff_checkin",{
+    p_schedule_id:text(formData.get("schedule_id")),
+    p_check_in_at:checkInIso,
+    p_check_out_at:checkOutIso,
+    p_reason:text(formData.get("reason"))
+  });
   if(error) go("/workforce",undefined,error.message);
   revalidatePath("/workforce"); revalidatePath("/dashboard");
   go("/workforce","Admin đã override Check-in/Check-out của nhân sự.");

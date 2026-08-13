@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { addPayment, createRenewalFollowup, createTuitionAccount, generateRenewalNotifications, sendFinanceNotification, updatePayment, updateRenewalFollowup, updateTuitionAccount } from "@/app/actions";
+import { addPayment, createRenewalFollowup, createTuitionAccount, deletePaymentAndReceipt, generateRenewalNotifications, sendFinanceNotification, updatePayment, updateReceiptDetails, updateRenewalFollowup, updateTuitionAccount } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
 import { requireRole } from "@/lib/auth";
@@ -18,19 +18,25 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const canManage = profile.role === "admin" || profile.role === "customer_service";
   const isAdmin = profile.role === "admin";
 
-  const [{ data: accounts, error }, { data: payments }, { data: receipts }, { data: followups }, { data: students }, { data: enrollments }] = await Promise.all([
+  const monthKey = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,7);
+  const monthStart = `${monthKey}-01`;
+  const monthEndDate = new Date(`${monthStart}T00:00:00+07:00`); monthEndDate.setMonth(monthEndDate.getMonth()+1);
+  const monthEnd = monthEndDate.toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
+  const [{ data: accounts, error }, { data: payments }, { data: receipts }, { data: followups }, { data: students }, { data: enrollments }, { data: monthPayments }] = await Promise.all([
     supabase.from("tuition_accounts").select("id,student_id,enrollment_id,package_name,gross_amount,discount_amount,net_amount,paid_amount,balance_amount,purchased_hours,used_hours,renewal_due_date,status,created_at,students(id,code,full_name),enrollments(id,classes(code,name))").is("archived_at", null).order("renewal_due_date", { ascending: true }),
     supabase.from("payment_transactions").select("id,tuition_account_id,amount,paid_at,method,reference,note,tuition_accounts(package_name,students(code,full_name))").order("paid_at", { ascending: false }).limit(150),
-    supabase.from("payment_receipts").select("id,receipt_no,payment_transaction_id,status").order("issued_at", { ascending: false }).limit(150),
+    supabase.from("payment_receipts").select("id,receipt_no,payment_transaction_id,status,payer_name,package_name,payment_method,reference,note").order("issued_at", { ascending: false }).limit(150),
     canManage ? supabase.from("renewal_followups").select("id,tuition_account_id,due_at,status,outcome,note,tuition_accounts(package_name,students(code,full_name))").order("due_at", { ascending: true }).limit(100) : Promise.resolve({ data: [] as any[] }),
     canManage ? supabase.from("students").select("id,code,full_name").is("archived_at", null).order("full_name") : Promise.resolve({ data: [] as any[] }),
-    canManage ? supabase.from("enrollments").select("id,student_id,classes(code,name)").is("archived_at", null).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as any[] })
+    canManage ? supabase.from("enrollments").select("id,student_id,classes(code,name)").is("archived_at", null).order("created_at", { ascending: false }) : Promise.resolve({ data: [] as any[] }),
+    canManage ? supabase.from("payment_transactions").select("amount").gte("paid_at",`${monthStart}T00:00:00+07:00`).lt("paid_at",`${monthEnd}T00:00:00+07:00`) : Promise.resolve({data:[] as any[]})
   ]);
 
   const receiptByPayment = new Map((receipts || []).map((row: any) => [row.payment_transaction_id, row]));
   const totalNet = (accounts || []).reduce((sum: number, row: any) => sum + Number(row.net_amount || 0), 0);
   const totalPaid = (accounts || []).reduce((sum: number, row: any) => sum + Number(row.paid_amount || 0), 0);
   const totalBalance = (accounts || []).reduce((sum: number, row: any) => sum + Number(row.balance_amount || 0), 0);
+  const monthRevenue = (monthPayments || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0);
   const todayString = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
   const today = new Date(`${todayString}T00:00:00+07:00`);
   const in14Days = new Date(today.getTime() + 14 * 86400000);
@@ -68,7 +74,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     <FormDetails title="₫ Ghi nhận thu tiền">
       <form action={addPayment}><FormGrid>
         <SelectField label="Gói học phí" name="tuition_account_id" required options={accountOptions} />
-        <Field label="Số tiền" name="amount" type="number" min="1" step="1000" required />
+        <Field label="Số tiền" name="amount" type="number" min="1000" step="1000" required />
         <Field label="Thời điểm thanh toán" name="paid_at" type="datetime-local" />
         <SelectField label="Phương thức" name="method" options={[{ value: "Bank transfer", label: "Chuyển khoản" }, { value: "Cash", label: "Tiền mặt" }, { value: "Card", label: "Thẻ" }, { value: "Other", label: "Khác" }]} />
         <Field label="Mã tham chiếu" name="reference" />
@@ -101,6 +107,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <MetricCard label="Giá trị gói học" value={formatMoney(totalNet)} />
       <MetricCard label="Đã thu" value={formatMoney(totalPaid)} tone="green" />
       <MetricCard label="Còn phải thu" value={formatMoney(totalBalance)} tone={totalBalance > 0 ? "red" : "neutral"} />
+      <MetricCard label="Doanh thu tháng này" value={formatMoney(monthRevenue)} tone="green" />
       <MetricCard label="Tái phí trong 14 ngày" value={renewalSoonRows.length} tone="yellow" />
     </div>
 
@@ -139,7 +146,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <Panel title="Giao dịch & phiếu thu" description="Mỗi lần thu tiền được lưu thành một giao dịch riêng">
         {payments?.length ? <div className="alert-list">{payments.map((row: any) => {
           const account = joined(row.tuition_accounts); const student = joined(account?.students); const receipt = receiptByPayment.get(row.id) as any;
-          return <div className="alert-item payment-ledger-item" key={row.id}><i/><div><strong>{formatMoney(row.amount)} · {student?.full_name || "Học viên"}</strong><span>{new Date(row.paid_at).toLocaleString("vi-VN")} · {row.method || "Chưa ghi phương thức"} {row.reference ? `· ${row.reference}` : ""}</span><div className="row-actions payment-actions">{receipt ? <Link className="button button-primary button-small" href={`/finance/receipts/${row.id}`}>In {receipt.receipt_no}</Link> : null}{canManage ? <details className="inline-details"><summary className="button button-ghost button-small">Sửa giao dịch</summary><form action={updatePayment} className="inline-edit-form"><input type="hidden" name="payment_id" value={row.id}/><Field label="Số tiền" name="amount" type="number" step="1000" defaultValue={row.amount} required/><Field label="Thời điểm" name="paid_at" type="datetime-local" defaultValue={String(row.paid_at).slice(0,16)} required/><Field label="Phương thức" name="method" defaultValue={row.method || ""}/><Field label="Reference" name="reference" defaultValue={row.reference || ""}/><TextAreaField label="Ghi chú" name="note" defaultValue={row.note || ""}/><button className="button button-primary">Lưu giao dịch</button></form></details> : null}</div></div><Status value="Paid"/></div>;
+          return <div className="alert-item payment-ledger-item" key={row.id}><i/><div><strong>{formatMoney(row.amount)} · {student?.full_name || "Học viên"}</strong><span>{new Date(row.paid_at).toLocaleString("vi-VN")} · {row.method || "Chưa ghi phương thức"} {row.reference ? `· ${row.reference}` : ""}</span><div className="row-actions payment-actions">{receipt ? <Link className="button button-primary button-small" href={`/finance/receipts/${row.id}`}>In {receipt.receipt_no}</Link> : null}{canManage ? <details className="inline-details"><summary className="button button-ghost button-small">Sửa số tiền / giao dịch</summary><form action={updatePayment} className="inline-edit-form"><input type="hidden" name="payment_id" value={row.id}/><Field label="Số tiền" name="amount" type="number" min="1000" step="1000" defaultValue={row.amount} required/><Field label="Thời điểm" name="paid_at" type="datetime-local" defaultValue={String(row.paid_at).slice(0,16)} required/><Field label="Phương thức" name="method" defaultValue={row.method || ""}/><Field label="Reference" name="reference" defaultValue={row.reference || ""}/><TextAreaField label="Ghi chú" name="note" defaultValue={row.note || ""}/><button className="button button-primary">Lưu · tự cập nhật doanh thu</button></form></details> : null}{canManage&&receipt?<details className="inline-details"><summary className="button button-secondary button-small">Sửa phiếu thu</summary><form action={updateReceiptDetails} className="inline-edit-form"><input type="hidden" name="payment_id" value={row.id}/><Field label="Người nộp" name="payer_name" defaultValue={receipt.payer_name||student?.full_name||""} required/><Field label="Nội dung / gói học" name="package_name" defaultValue={receipt.package_name||account?.package_name||""} required/><Field label="Phương thức hiển thị" name="payment_method" defaultValue={receipt.payment_method||row.method||""}/><Field label="Reference" name="reference" defaultValue={receipt.reference||row.reference||""}/><TextAreaField label="Ghi chú trên phiếu" name="note" defaultValue={receipt.note||row.note||""}/><button className="button button-primary">Lưu phiếu thu</button></form></details>:null}{canManage?<details className="inline-details"><summary className="button button-danger button-small">Xóa</summary><form action={deletePaymentAndReceipt} className="form-stack payment-delete-form"><input type="hidden" name="payment_id" value={row.id}/><TextAreaField label="Lý do xóa giao dịch / phiếu thu" name="reason" required/><div className="finance-delete-warning">Xóa sẽ trừ giao dịch khỏi doanh thu và tính lại công nợ học viên.</div><button className="button button-danger">Xác nhận xóa</button></form></details>:null}</div></div><Status value="Paid"/></div>;
         })}</div> : <Empty title="Chưa có giao dịch" description="Giao dịch mới sẽ tự tạo phiếu thu có thể in."/>}
       </Panel>
       {canManage ? <Panel title="Theo dõi tái phí" description="Lịch liên hệ và kết quả chăm sóc">

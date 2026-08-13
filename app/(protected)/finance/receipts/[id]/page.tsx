@@ -18,7 +18,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{id:stri
   const student=joined((receipt as any).students);
   const issuedDate=new Date((receipt as any).issued_at);
   return <div className="receipt-page">
-    <div className="receipt-toolbar no-print"><Link className="button button-ghost" href="/finance">← Quay lại tài chính</Link><PrintButton/></div>
+    <div className="receipt-toolbar no-print"><Link className="button button-ghost" href="/finance">← Quay lại tài chính / chỉnh sửa</Link><PrintButton/></div>
     <article className="receipt-sheet">
       <header className="receipt-header"><img src="/zest-logo.png" alt="ZEST for English"/><div><strong>ZEST FOR ENGLISH</strong><span>ZE CenterOS · Phiếu thu học phí</span></div></header>
       <div className="receipt-title"><p>PHIẾU THU</p><h1>{(receipt as any).receipt_no}</h1><span>Ngày {issuedDate.toLocaleDateString("vi-VN")} · {issuedDate.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"})}</span></div>

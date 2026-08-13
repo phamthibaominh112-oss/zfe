@@ -1497,3 +1497,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   .attendance-batch-meta{grid-template-columns:1fr}
   .attendance-batch-savebar .button{width:100%}
 }
+
+
+/* v1.6.0 — assignment + finance admin controls */
+.assignment-manage-row{align-items:start}
+.assignment-edit-details,.assignment-delete-details{max-width:340px}
+.payment-delete-form{min-width:min(360px,80vw)}
+.finance-delete-warning{padding:9px 11px;border:1px solid #f4b0aa;border-radius:10px;background:#fff2f1;color:#9f261d;font-size:11px;line-height:1.4}
+.payment-actions{align-items:center;flex-wrap:wrap}
