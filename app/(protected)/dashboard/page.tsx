@@ -8,6 +8,7 @@ import { formatDate, formatMoney, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/vietnam-date";
 import type { CSSProperties, ReactNode } from "react";
 import { canAccessStaffOps } from "@/lib/staff-ops";
+import { buildFinanceDashboardData } from "@/lib/finance-dashboard-data";
 
 function weekRange() {
   const now = vietnamTodayDate();
@@ -69,7 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const mainTeacherClassIds=new Set((classTeacherLinks.data||[]).map((x:any)=>x.class_id));
     const weekScheduledClassIds=new Set((weekSessions.data||[]).filter((x:any)=>!String(x.status).toLowerCase().includes("cancel")).map((x:any)=>x.class_id));
     const classesNeedingSchedule=(activeClasses.data||[]).filter((x:any)=>!mainTeacherClassIds.has(x.id)||!weekScheduledClassIds.has(x.id));
-    let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0 };
+    let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0, allocated:0, recognized:0, deferred:0, futureAllocated:0, unallocated:0 };
     let adminTeacherRates: any[] = [];
     let adminPayrollStatements: any[] = [];
     let importedMonthlyBalance: any = null;
@@ -92,11 +93,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       adminTeacherRates = teacherRates.data || [];
       adminPayrollStatements = payrollStatements.data || [];
       importedMonthlyBalance = monthlyBalance.data || null;
+      const financeIntelligence=await buildFinanceDashboardData(supabase);
       adminFinance = {
         revenue: (monthPayments.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
         expenses: (monthExpenses.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
         outstanding: (tuitionRows.data || []).reduce((sum:number,row:any)=>sum+Number(row.balance_amount||0),0),
-        renewalAlerts: renewalRows.count || 0
+        renewalAlerts: renewalRows.count || 0,
+        allocated:Number(financeIntelligence.kpi.allocatedCurrent||0),
+        recognized:Number(financeIntelligence.kpi.recognizedCurrent||0),
+        deferred:Number(financeIntelligence.kpi.deferred||0),
+        futureAllocated:Number(financeIntelligence.kpi.futureAllocated||0),
+        unallocated:Number(financeIntelligence.kpi.unallocated||0)
       };
     }
 
@@ -138,6 +145,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
       {classesNeedingSchedule.length?<Panel className="section-gap" title="⚠ Lớp cần xếp GV / lịch" description="Lớp Active nhưng thiếu GV chính hoặc chưa có session trong tuần hiện tại." action={<Link className="text-link" href="/class-planner">Mở Xếp lớp & GV →</Link>}><div className="warning-chip-list">{classesNeedingSchedule.slice(0,12).map((row:any)=><span key={row.id}>{row.code}</span>)}</div></Panel>:null}
       {(milestoneSessions.data||[]).length?<Panel className="section-gap" title="Mốc Midterm / Final sắp tới" description="Buổi 18 = Midterm · Buổi 36 = Final"><div className="milestone-warning-grid">{(milestoneSessions.data||[]).map((row:any)=>{const c=joined(row.classes);return <div className={`milestone-warning-card ${Number(row.session_no)===18?"mid":"final"}`} key={row.id}><span>{Number(row.session_no)===18?"MIDTERM":"FINAL"}</span><strong>{c?.code} · Buổi {row.session_no}</strong><small>{formatDate(row.scheduled_date)} · {row.start_time?.slice(0,5)}</small></div>})}</div></Panel>:null}
+      {profile.role === "admin" ? <Panel className="section-gap finance-intelligence-summary" title="Finance Intelligence · Live" description="Revenue map theo từng học viên/gói học và Start–End date; Cash là giao dịch thu thực tế." action={<Link className="text-link" href="/finance-intelligence">Mở dashboard →</Link>}>
+        <div className="metrics-grid compact-metrics">
+          <MetricCard label="Allocated Revenue" value={formatMoney(adminFinance.allocated)} />
+          <MetricCard label="Recognized · MTD" value={formatMoney(adminFinance.recognized)} tone="green" />
+          <MetricCard label="Cash In" value={formatMoney(adminFinance.revenue)} />
+          <MetricCard label="Deferred" value={formatMoney(adminFinance.deferred)} tone="yellow" />
+          <MetricCard label="Future Allocated" value={formatMoney(adminFinance.futureAllocated)} />
+          <MetricCard label="Unallocated" value={formatMoney(adminFinance.unallocated)} tone={adminFinance.unallocated>0?"red":"green"} />
+        </div>
+      </Panel> : null}
       {profile.role === "admin" ? <Panel className="section-gap" title="Tài chính tháng này" description="Thu, chi, công nợ và cảnh báo tái phí" action={<Link className="text-link" href="/finance/reports">Mở báo cáo →</Link>}>
         <div className="metrics-grid compact-metrics">
           <MetricCard label="Đã thu" value={formatMoney(adminFinance.revenue)} tone="green" />

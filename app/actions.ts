@@ -355,6 +355,41 @@ export async function moveStudentEnrollment(studentId: string, targetClassId: st
   }
 }
 
+export async function saveTeacherWeeklyAvailability(formData: FormData) {
+  const profile=await requireRole(["admin","academic_manager","teacher"]);
+  const supabase=await createClient();
+  let teacherId=text(formData.get("teacher_id"));
+  const weekStart=text(formData.get("week_start"));
+  const weekOffset=text(formData.get("week_offset"))||"0";
+  const target=`/schedule?week=${weekOffset}`;
+
+  if(profile.role==="teacher"){
+    const {data,error}=await supabase.from("teachers").select("id").eq("user_id",profile.id).maybeSingle();
+    if(error||!data) go(target,undefined,error?.message||"Không tìm thấy teacher profile.");
+    teacherId=data.id;
+  }
+  if(!teacherId||!weekStart) go(target,undefined,"Thiếu giáo viên hoặc tuần đăng ký.");
+
+  const slots:any[]=[];
+  for(let day=1;day<=7;day++){
+    if(formData.get(`selected_${day}`)!=="on") continue;
+    const start=text(formData.get(`start_${day}`));
+    const end=text(formData.get(`end_${day}`));
+    if(!start||!end) go(target,undefined,`Ngày ${day} chưa nhập đủ giờ.`);
+    if(end<=start) go(target,undefined,`Giờ kết thúc phải sau giờ bắt đầu ở ngày ${day}.`);
+    slots.push({weekday:day,start_time:start,end_time:end});
+  }
+  if(!slots.length) go(target,undefined,"Chọn ít nhất một ngày rảnh.");
+
+  const {data,error}=await supabase.rpc("save_teacher_week_availability",{
+    p_teacher_id:teacherId,p_week_start:weekStart,p_slots:slots,
+    p_mode:text(formData.get("mode"))||null,p_campus:text(formData.get("campus"))||null,p_note:text(formData.get("note"))||null
+  });
+  if(error) go(target,undefined,`Không lưu được lịch rảnh tuần: ${error.message}`);
+  revalidatePath("/schedule");
+  go(target,`Đã lưu ${Number(data||slots.length)} ngày rảnh cho tuần đang xem.`);
+}
+
 export async function createTeacherAvailability(formData: FormData) {
   const profile = await requireRole(["admin", "academic_manager", "teacher"]);
   const supabase = await createClient();
@@ -2096,6 +2131,73 @@ export async function createStaffWorkSchedule(formData: FormData) {
   revalidatePath("/workforce");
   revalidatePath("/dashboard");
   go("/workforce", "Đã đăng ký lịch làm.");
+}
+
+export async function requestTeacherBatchCheckinOverride(formData: FormData) {
+  const profile=await requireRole(["teacher"]);
+  const supabase=await createClient();
+  const sessionIds=[...new Set(formData.getAll("session_id").map(String).filter(Boolean))];
+  const reason=text(formData.get("reason"));
+  const month=text(formData.get("month"));
+  const target=month?`/workforce?month=${month}`:"/workforce";
+  if(!sessionIds.length) go(target,undefined,"Chọn ít nhất một buổi cần override.");
+  if(!reason) go(target,undefined,"Nhập lý do chung.");
+
+  const {data:teacher,error:teacherError}=await supabase.from("teachers").select("id").eq("user_id",profile.id).maybeSingle();
+  if(teacherError||!teacher) go(target,undefined,teacherError?.message||"Không tìm thấy hồ sơ giáo viên.");
+
+  const [{data:sessions,error:sessionError},{data:pending}]=await Promise.all([
+    supabase.from("sessions").select("id,scheduled_date,start_time,end_time,session_teachers!inner(teacher_id)")
+      .in("id",sessionIds).eq("session_teachers.teacher_id",teacher.id).neq("status","Cancelled").is("archived_at",null),
+    supabase.from("teacher_checkin_override_requests").select("session_id").eq("teacher_id",teacher.id).eq("status","Pending").in("session_id",sessionIds)
+  ]);
+  if(sessionError) go(target,undefined,sessionError.message);
+  const pendingIds=new Set((pending||[]).map((x:any)=>x.session_id));
+  const rows=(sessions||[]).filter((row:any)=>!pendingIds.has(row.id)).map((row:any)=>({
+    session_id:row.id,teacher_id:teacher.id,requested_by:profile.id,
+    requested_check_in_at:vietnamLocalDateTimeIso(`${row.scheduled_date}T${String(row.start_time).slice(0,5)}`),
+    requested_check_out_at:vietnamLocalDateTimeIso(`${row.scheduled_date}T${String(row.end_time).slice(0,5)}`),
+    reason,status:"Pending"
+  }));
+  if(rows.length){
+    const {error}=await supabase.from("teacher_checkin_override_requests").insert(rows);
+    if(error) go(target,undefined,error.message);
+  }
+  revalidatePath("/workforce");
+  go(target,`Đã gửi ${rows.length} yêu cầu override.${pendingIds.size?` ${pendingIds.size} buổi đã Pending nên bỏ qua.`:""}`);
+}
+
+export async function adminBatchOverrideTeacherCheckins(formData: FormData) {
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const values=[...new Set(formData.getAll("session_teacher").map(String).filter(Boolean))];
+  const reason=text(formData.get("reason"));
+  const month=text(formData.get("month"));
+  const target=month?`/workforce?month=${month}`:"/workforce";
+  if(!values.length) go(target,undefined,"Chọn ít nhất một ca cần override.");
+  if(!reason) go(target,undefined,"Nhập lý do chung.");
+
+  const pairs=values.map(value=>{const [sessionId,teacherId]=value.split("|");return {sessionId,teacherId};}).filter(x=>x.sessionId&&x.teacherId);
+  const sessionIds=[...new Set(pairs.map(x=>x.sessionId))];
+  const {data:sessions,error}=await supabase.from("sessions").select("id,scheduled_date,start_time,end_time,session_teachers(teacher_id)")
+    .in("id",sessionIds).neq("status","Cancelled").is("archived_at",null);
+  if(error) go(target,undefined,error.message);
+  const byId=new Map((sessions||[]).map((row:any)=>[row.id,row]));
+  let done=0;
+  for(const pair of pairs){
+    const session:any=byId.get(pair.sessionId);
+    if(!session||(session.session_teachers||[]).every((x:any)=>x.teacher_id!==pair.teacherId)) continue;
+    const {error:rpcError}=await supabase.rpc("admin_override_teacher_checkin",{
+      p_session_id:pair.sessionId,p_teacher_id:pair.teacherId,
+      p_check_in_at:vietnamLocalDateTimeIso(`${session.scheduled_date}T${String(session.start_time).slice(0,5)}`),
+      p_check_out_at:vietnamLocalDateTimeIso(`${session.scheduled_date}T${String(session.end_time).slice(0,5)}`),
+      p_reason:reason
+    });
+    if(rpcError) go(target,undefined,`Batch dừng: ${rpcError.message}`);
+    done++;
+  }
+  revalidatePath("/workforce");revalidatePath("/payroll");revalidatePath("/dashboard");
+  go(target,`Đã override ${done} ca theo giờ lịch.`);
 }
 
 export async function requestTeacherCheckinOverride(formData: FormData) {

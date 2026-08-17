@@ -50,6 +50,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/quality", label: "Chất lượng GV", short: "★" },
   { href: "/finance", label: "Thu phí & tài chính", short: "₫" },
   { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC" },
+  { href: "/finance-intelligence", label: "Finance Intelligence", short: "FI" },
   { href: "/payroll", label: "Lương giáo viên", short: "LG" },
   { href: "/catalog", label: "Chương trình", short: "PL" },
   { href: "/sop", label: "SOP & Training", short: "SOP" },

@@ -1,6 +1,7 @@
 import { archiveSessionSchedule, createSession, createTeacherAvailability, deleteTeacherAvailability, duplicatePreviousWeekSchedule, updateSessionObserver, updateSessionSchedule, updateSessionTeachingTeam, updateTeacherAvailability } from "@/app/actions";
 import { Field, FormGrid, SelectField, TextAreaField } from "@/components/forms";
 import { Empty, Flash, FormDetails, MetricCard, PageHeader, Panel, Status } from "@/components/ui";
+import { TeacherAvailabilityWeekForm } from "@/components/teacher-availability-week-form";
 import { requireRole } from "@/lib/auth";
 import { formatDate, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayString, vietnamWeek } from "@/lib/vietnam-date";
@@ -186,8 +187,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       : "Xếp session theo LỚP, sau đó gán GV/TA. Học viên nhận lịch thông qua enrollment vào lớp.";
 
   const actions = <div className="page-actions">
-    {profile.role !== "student" ? <FormDetails title={profile.role === "teacher" ? "Cập nhật lịch rảnh" : "Thêm lịch rảnh GV"}><form action={createTeacherAvailability}><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><input type="hidden" name="return_observer" value={selectedObserverId}/><FormGrid>
-      {canManage ? <SelectField label="Giáo viên" name="teacher_id" required options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/> : null}
+    {profile.role === "teacher" ? <FormDetails title="Đăng ký lịch rảnh cả tuần"><TeacherAvailabilityWeekForm weekStart={start} weekEnd={end} weekOffset={safeOffset} existing={(availability.data||[]).filter((slot:any)=>overlapsPeriod(slot,start,end)).map((slot:any)=>({weekday:slot.weekday,start_time:slot.start_time,end_time:slot.end_time}))}/></FormDetails> : canManage ? <FormDetails title="Thêm lịch rảnh GV"><form action={createTeacherAvailability}><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><input type="hidden" name="return_observer" value={selectedObserverId}/><FormGrid>
+      <SelectField label="Giáo viên" name="teacher_id" required options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
       <SelectField label="Ngày" name="weekday" required options={DAY_LABELS.map((label,index)=>({value:String(index+1),label}))}/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/>
       <SelectField label="Hình thức" name="mode" options={["Online","Offline","Hybrid"].map(v=>({value:v,label:v}))}/><Field label="Cơ sở" name="campus"/>
@@ -407,7 +408,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       </div>
     </details> : profile.role === "teacher" ? <details className="tool-drawer section-gap">
       <summary><div><strong>Lịch rảnh của tôi</strong><span>Xem lại các khung giờ đã đăng ký</span></div><b>+</b></summary>
-      <div className="tool-drawer-body">{availability.data?.length ? <div className="compact-list">{availability.data.map((item:any)=><div className="compact-row" key={item.id}><div><strong>{DAY_LABELS[item.weekday-1]} · {item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</strong><span>{formatDate(item.effective_from)} → {formatDate(item.effective_to)}</span></div><small>{item.mode || "Linh hoạt"} · {item.campus || "Mọi cơ sở"}</small></div>)}</div> : <Empty title="Bạn chưa đăng ký lịch rảnh" description="Bấm Cập nhật lịch rảnh ở đầu trang để thêm khung giờ."/>}</div>
+      <div className="tool-drawer-body"><div className="availability-week-overview">{DAY_LABELS.map((label,index)=>{const rows=(availability.data||[]).filter((item:any)=>item.weekday===index+1&&overlapsPeriod(item,start,end));return <div className={`availability-overview-day ${rows.length?"has-slots":""}`} key={label}><strong>{label}</strong>{rows.length?rows.map((item:any)=><span key={item.id}>{item.start_time?.slice(0,5)}–{item.end_time?.slice(0,5)}</span>):<span>—</span>}</div>})}</div><small className="availability-week-caption">Overview tuần {formatDate(start)} – {formatDate(end)}. Cập nhật nhiều ngày bằng một lần lưu ở đầu trang.</small></div>
     </details> : null}
   </>;
 }

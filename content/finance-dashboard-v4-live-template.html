@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZFE Finance — Interactive Revenue & Profit Dashboard</title>
+<style>
+:root{
+  --bg:#f5f6fa;--card:#fff;--ink:#161b2b;--muted:#71798e;--line:#e7e9f0;
+  --purple:#6847f5;--purple2:#9b74ff;--purpleSoft:#eee9ff;--green:#159b6b;
+  --greenSoft:#eaf8f3;--red:#d94b59;--redSoft:#ffedf0;--amber:#d9901f;
+  --amberSoft:#fff5df;--blue:#3178c6;--dark:#16192a;--shadow:0 14px 38px rgba(25,29,48,.07);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit}
+button{cursor:pointer}
+.app{max-width:1510px;margin:auto;padding:24px}
+header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:16px}
+.brand{display:flex;align-items:center;gap:13px}.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(145deg,var(--purple),#a85cff);color:#fff;font-weight:900;display:grid;place-items:center;box-shadow:0 10px 25px rgba(104,71,245,.27)}
+h1{margin:0;font-size:23px;letter-spacing:-.035em}.muted{color:var(--muted)}.small{font-size:11px}.sub{font-size:12px;color:var(--muted)}
+.asof{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font-size:11px;color:var(--muted)}
+.tabs{display:flex;gap:6px;overflow:auto;padding:5px;background:#eceef4;border-radius:13px;margin-bottom:18px}
+.tab{border:0;background:transparent;padding:9px 14px;border-radius:9px;font-size:12px;color:#646d80;white-space:nowrap}
+.tab.active{background:#fff;color:var(--ink);font-weight:750;box-shadow:0 2px 10px rgba(29,32,51,.07)}
+.page{display:none}.page.active{display:block}
+.note{display:flex;align-items:flex-start;gap:12px;padding:15px 17px;background:linear-gradient(110deg,#211b44,#32286e);color:#fff;border-radius:17px;margin-bottom:16px;box-shadow:var(--shadow)}
+.note .ico{width:30px;height:30px;border-radius:9px;background:#ffffff18;display:grid;place-items:center;flex:0 0 auto}
+.note b{font-size:12px}.note span{font-size:11px;color:#dcd8fb;line-height:1.45}
+.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(6,1fr);margin-bottom:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.kpi{padding:17px;min-height:122px;position:relative;overflow:hidden}.kpi:after{content:"";position:absolute;width:76px;height:76px;border-radius:50%;right:-22px;top:-22px;background:var(--purpleSoft)}
+.kpi .label{font-size:10px;color:var(--muted);font-weight:750;text-transform:uppercase;letter-spacing:.045em;position:relative;z-index:1}.kpi .value{font-size:24px;font-weight:850;letter-spacing:-.045em;margin:12px 0 7px;position:relative;z-index:1}.kpi .desc{font-size:10px;color:var(--muted);line-height:1.35;position:relative;z-index:1}
+.kpi.primary .value{color:var(--purple)}.kpi.rec .value{color:var(--green)}.kpi.warn .value{color:var(--red)}.kpi.warn:after{background:var(--redSoft)}
+.definition-grid{grid-template-columns:1fr 1fr;margin-bottom:16px}.definition{padding:17px}.definition h3{font-size:13px;margin:0 0 7px}.definition p{font-size:11px;color:var(--muted);line-height:1.55;margin:0}.definition.alloc{border-left:4px solid var(--purple)}.definition.rec{border-left:4px solid var(--green)}
+.section{padding:18px}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}.head h2{font-size:15px;margin:0 0 4px;letter-spacing:-.02em}
+.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.btn,.select,.field{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;font-size:11px;color:var(--ink)}.btn.active,.btn.primary{background:var(--dark);color:#fff;border-color:var(--dark)}.btn.ghost{color:var(--muted)}
+.chart-card{margin-bottom:16px}.legend{display:flex;gap:15px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-bottom:10px}.lg{display:inline-flex;align-items:center;gap:5px}.dot{width:8px;height:8px;border-radius:50%}
+.chart-shell{position:relative;height:350px;padding:18px 8px 42px 45px;border-radius:14px;background:linear-gradient(#fff,#fdfdff);overflow:hidden}.gridlines{position:absolute;left:45px;right:8px;top:18px;bottom:42px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}.gridline{border-top:1px dashed #e9ebf2;position:relative}.gridline span{position:absolute;right:calc(100% + 8px);top:-7px;width:35px;text-align:right;font-size:9px;color:#98a0af}
+.bar-area{position:absolute;left:45px;right:8px;top:18px;bottom:42px;display:flex;align-items:stretch;gap:4px}.month-group{position:relative;flex:1;min-width:24px;display:flex;align-items:flex-end;justify-content:center;gap:2px;border-radius:6px;cursor:pointer;transition:.15s}.month-group:hover,.month-group.selected{background:#f5f2ff}.bar{width:28%;min-width:4px;max-width:15px;border-radius:4px 4px 1px 1px;transition:.18s}.bar.alloc{background:var(--purple)}.bar.rec{background:var(--green)}.bar.cash{background:#cfc7ff}.xlab{position:absolute;top:calc(100% + 9px);left:50%;transform:translateX(-50%) rotate(-25deg);transform-origin:center;font-size:8px;color:#858da0;white-space:nowrap}
+.tooltip{display:none;position:fixed;z-index:999;background:#171b2c;color:#fff;border-radius:11px;padding:10px 11px;box-shadow:0 12px 30px rgba(0,0,0,.22);font-size:10px;line-height:1.5;pointer-events:none;min-width:190px}.tooltip.show{display:block}.tooltip b{font-size:11px}
+.compare-grid{grid-template-columns:1.15fr .85fr;margin-bottom:16px}.compare-panel,.analysis{padding:18px}.compare-controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:10px}.compare-controls label{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:800;margin-bottom:5px}.vs{font-weight:900;color:#9aa1af;padding-bottom:9px}
+.metric-table{margin-top:15px;border-top:1px solid var(--line)}.metric-row{display:grid;grid-template-columns:1.25fr 1fr 1fr .8fr;gap:8px;padding:10px 0;border-bottom:1px solid #f0f1f5;align-items:center;font-size:10px}.metric-row.header{color:var(--muted);font-weight:750}.metric-row b{font-size:11px}.delta.pos{color:var(--green);font-weight:800}.delta.neg{color:var(--red);font-weight:800}
+.analysis .box{padding:12px;border-radius:12px;background:#f8f9fc;border:1px solid var(--line);font-size:11px;line-height:1.55;margin-top:10px}.analysis .box strong{color:var(--ink)}.analysis ul{padding-left:18px;margin:8px 0 0}.analysis li{margin:6px 0;color:#5f687c}
+.table-card{overflow:hidden}.toolbar{padding:17px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}.scroll{overflow:auto;max-height:520px}table{border-collapse:collapse;width:100%;min-width:1000px}th{position:sticky;top:0;z-index:2;background:#fafbfe;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.035em;text-align:left;padding:11px 13px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}td{font-size:10px;padding:11px 13px;border-bottom:1px solid #f0f1f5;vertical-align:top}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}.current-row{background:#f7f4ff}.future-row{background:#fbfffd}.neg{color:var(--red)!important}.pos{color:var(--green)!important}.tag{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:850}.tag.Current{background:var(--purpleSoft);color:var(--purple)}.tag.Future{background:var(--greenSoft);color:var(--green)}.tag.Past{background:#eef1f5;color:#6b7385}
+.profit-layout{grid-template-columns:1.2fr .8fr;margin-bottom:16px}.profit-main,.cost-base{padding:18px}.profit-kpis{grid-template-columns:repeat(3,1fr);margin-top:14px}.profit-mini{border:1px solid var(--line);background:#fafbfe;border-radius:14px;padding:13px}.profit-mini .v{font-size:20px;font-weight:850;letter-spacing:-.04em;margin-top:6px}.splitbar{height:16px;border-radius:999px;overflow:hidden;display:flex;margin:14px 0 8px;background:#eee}.split80{background:var(--purple);width:80%}.split20{background:#c9bcff;width:20%}.splitlabels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}.input-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.input-wrap label{display:block;font-size:9px;color:var(--muted);font-weight:800;text-transform:uppercase;margin-bottom:5px}.money-input{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:11px;background:#fff}.assumption{background:var(--amberSoft);border:1px solid #f0d99f;border-radius:12px;padding:11px;font-size:10px;color:#73551a;line-height:1.45;margin-top:13px}.cost-list{margin-top:12px}.cost-line{display:grid;grid-template-columns:1fr auto;gap:12px;font-size:10px;padding:8px 0;border-bottom:1px solid #f0f1f5}.cost-line b{font-variant-numeric:tabular-nums}.cost-total{font-size:20px;font-weight:850;letter-spacing:-.04em;color:var(--purple);margin:10px 0}.badge{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:8px;font-weight:850;background:#eef0f5;color:#687084}.badge.fixed{background:#ece8ff;color:var(--purple)}.badge.variable{background:#fff0e2;color:#b7661b}
+.ledger-top{grid-template-columns:repeat(3,1fr);margin-bottom:14px}.ledger-kpi{padding:14px}.ledger-kpi .v{font-size:22px;font-weight:850;letter-spacing:-.04em;margin-top:7px}.ledger-kpi.in .v{color:var(--green)}.ledger-kpi.out .v{color:var(--red)}.ledger-kpi.net .v{color:var(--purple)}.search{min-width:220px}.dir.IN{color:var(--green);font-weight:900}.dir.OUT{color:var(--red);font-weight:900}.daily-row{background:#f8f9fc;font-weight:800}
+.alert-grid{grid-template-columns:.4fr 1.6fr}.health{padding:18px}.health-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}.health-box{border:1px solid var(--line);border-radius:12px;padding:12px}.health-box b{display:block;font-size:23px}.health-box.OK b{color:var(--green)}.health-box.CRITICAL b{color:var(--red)}.health-box.HIGH b{color:#b66a21}.health-box.MEDIUM b{color:var(--amber)}.alert-list{overflow:hidden}.alert-row{display:grid;grid-template-columns:85px minmax(190px,1fr) 130px minmax(230px,1.3fr);gap:10px;padding:12px 17px;border-top:1px solid var(--line);font-size:10px;align-items:center}.sev{font-size:8px;font-weight:900;padding:5px 7px;border-radius:999px;width:max-content}.sev.CRITICAL{background:var(--redSoft);color:var(--red)}.sev.HIGH{background:#fff0e1;color:#b75e16}.sev.MEDIUM{background:var(--amberSoft);color:#9f6e16}.footer{font-size:9px;color:var(--muted);line-height:1.5;padding:18px 2px 4px}
+
+/* v4 — richer month comparison + founder accumulation */
+.compare-stage{display:grid;grid-template-columns:1fr 170px 1fr;gap:12px;align-items:stretch;margin-top:15px}
+.month-hero{border:1px solid var(--line);border-radius:16px;padding:15px;background:linear-gradient(145deg,#fff,#faf9ff);position:relative;overflow:hidden}
+.month-hero:after{content:"";position:absolute;right:-30px;top:-40px;width:110px;height:110px;border-radius:50%;background:var(--purpleSoft);opacity:.75}
+.month-hero.secondary:after{background:#eef1f5}.month-hero .eyebrow{font-size:9px;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.05em;position:relative;z-index:1}
+.month-hero h3{font-size:18px;margin:6px 0 12px;position:relative;z-index:1}.month-hero .hero-value{font-size:27px;font-weight:900;letter-spacing:-.045em;color:var(--purple);position:relative;z-index:1}
+.month-hero.secondary .hero-value{color:#555f73}.hero-subgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:13px;position:relative;z-index:1}.hero-sub{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px}.hero-sub span{display:block;font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:750}.hero-sub b{display:block;font-size:11px;margin-top:3px}
+.delta-orb-wrap{display:grid;place-items:center;text-align:center}.delta-orb{width:118px;height:118px;border-radius:50%;display:grid;place-items:center;position:relative;background:conic-gradient(var(--purple) 0deg,var(--purple) var(--orbdeg,180deg),#eceef4 var(--orbdeg,180deg),#eceef4 360deg);box-shadow:0 12px 28px rgba(104,71,245,.13)}
+.delta-orb:before{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}.delta-orb .inside{position:relative;z-index:1}.delta-orb .arrow{font-size:18px;font-weight:900;line-height:1}.delta-orb .pct{font-size:19px;font-weight:900;letter-spacing:-.04em;margin-top:1px}.delta-orb .cap{font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:800}
+.delta-orb.negative{background:conic-gradient(var(--red) 0deg,var(--red) var(--orbdeg,180deg),#f1e9eb var(--orbdeg,180deg),#f1e9eb 360deg)}.delta-orb.negative .pct,.delta-orb.negative .arrow{color:var(--red)}.delta-orb.positive .pct,.delta-orb.positive .arrow{color:var(--green)}
+.compare-pulses{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}.pulse-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fafbfe;position:relative;overflow:hidden}.pulse-card .p-label{font-size:8px;color:var(--muted);font-weight:800;text-transform:uppercase}.pulse-card .p-delta{font-size:15px;font-weight:900;margin-top:5px}.pulse-card .p-track{height:5px;background:#eaecf2;border-radius:999px;margin-top:8px;overflow:hidden}.pulse-card .p-fill{height:100%;border-radius:999px;background:var(--purple);width:0;transition:width .45s ease}.pulse-card.down .p-fill{background:var(--red)}.pulse-card.up .p-fill{background:var(--green)}
+.spark-card{margin-top:12px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:#fff}.spark-head{display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--muted);margin-bottom:4px}.spark-card svg{width:100%;height:92px;display:block}
+.accum-section{margin-top:16px}.accum-layout{grid-template-columns:1.15fr .85fr;margin-bottom:16px}.accum-main,.growth-card{padding:18px}.accum-kpis{grid-template-columns:repeat(4,1fr);margin:14px 0}.accum-kpi{border:1px solid var(--line);border-radius:13px;padding:12px;background:#fafbfe}.accum-kpi span{display:block;font-size:8px;color:var(--muted);font-weight:800;text-transform:uppercase}.accum-kpi b{display:block;font-size:20px;letter-spacing:-.04em;margin-top:5px}.accum-kpi.a b{color:var(--purple)}.accum-kpi.b b{color:#8263dc}
+.accum-chart{height:265px;border:1px solid var(--line);border-radius:14px;padding:14px 12px 29px;background:linear-gradient(#fff,#fdfdff);display:flex;align-items:flex-end;gap:6px;position:relative}.acc-month{flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center;gap:3px;position:relative;min-width:24px}.acc-bar{width:24%;min-width:5px;max-width:14px;border-radius:4px 4px 1px 1px;transition:height .45s ease}.acc-bar.a{background:var(--purple)}.acc-bar.b{background:#c6b7ff}.acc-month.missing .acc-bar{background:repeating-linear-gradient(45deg,#dfe2ea,#dfe2ea 3px,#f4f5f8 3px,#f4f5f8 6px);height:4px!important}.acc-lab{position:absolute;top:calc(100% + 7px);font-size:8px;color:var(--muted);white-space:nowrap}.acc-start{position:absolute;top:4px;bottom:24px;width:2px;background:var(--amber);opacity:.75}.acc-start-label{position:absolute;top:2px;transform:translateX(6px);font-size:8px;color:#9d6b16;font-weight:850;background:#fff7e5;padding:3px 5px;border-radius:6px}
+.coverage{height:8px;border-radius:999px;background:#eceef4;overflow:hidden;margin-top:8px}.coverage i{display:block;height:100%;background:linear-gradient(90deg,var(--purple),var(--green));border-radius:999px}
+.growth-list{margin-top:10px}.growth-item{padding:11px 0;border-bottom:1px solid #f0f1f5}.growth-item:last-child{border-bottom:0}.growth-item .g-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.growth-item b{font-size:11px}.growth-item .g-val{font-size:13px;font-weight:900}.growth-item p{font-size:9px;color:var(--muted);line-height:1.45;margin:4px 0 0}
+.cost-composition{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#eee;margin:10px 0}.cost-fixed{background:var(--purple)}.cost-variable{background:var(--amber)}.cost-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:9px;color:var(--muted)}
+.input-cost{width:110px;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:10px;text-align:right}.input-cost:disabled{background:#f1f2f6;color:#6a7284}.basis{font-size:8px;font-weight:850;padding:4px 6px;border-radius:999px;display:inline-flex}.basis.actual{background:var(--greenSoft);color:var(--green)}.basis.forecast{background:var(--amberSoft);color:#9b6915}.basis.missing{background:var(--redSoft);color:var(--red)}
+@media(max-width:900px){.compare-stage,.accum-layout{grid-template-columns:1fr}.delta-orb-wrap{padding:3px}.compare-pulses,.accum-kpis{grid-template-columns:1fr 1fr}.delta-orb{width:95px;height:95px}.delta-orb .pct{font-size:16px}}
+
+@media(max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.compare-grid,.profit-layout,.alert-grid{grid-template-columns:1fr}.profit-kpis{grid-template-columns:1fr 1fr 1fr}}
+@media(max-width:760px){.app{padding:13px}header{align-items:flex-start;flex-direction:column}.kpis{grid-template-columns:1fr 1fr}.definition-grid{grid-template-columns:1fr}.compare-controls{grid-template-columns:1fr}.vs{display:none}.metric-row{grid-template-columns:1.3fr 1fr 1fr}.metric-row>*:last-child{grid-column:2/-1}.profit-kpis,.input-grid,.ledger-top{grid-template-columns:1fr}.chart-shell{height:320px}.alert-row{grid-template-columns:75px 1fr}.alert-row>*:nth-child(3),.alert-row>*:nth-child(4){grid-column:2}.kpi .value{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand"><div class="logo">ZF</div><div><h1>ZFE Finance Dashboard</h1><div class="sub">Revenue allocation first • cashflow reconciliation • profit split • daily ledger</div></div></div>
+  <div class="asof">As of <b id="asof"></b></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-page="overview">Revenue Overview</button>
+  <button class="tab" data-page="monthly">Month Compare</button>
+  <button class="tab" data-page="profit">Profit & 80/20 Split</button>
+  <button class="tab" data-page="ledger">Cash In / Out Ledger</button>
+  <button class="tab" data-page="alerts">Alerts</button>
+</nav>
+
+<section class="page active" id="page-overview">
+  <div class="note"><div class="ico">≠</div><div><b>Cash collected không phải là revenue của tháng thu tiền.</b><br><span>Học phí thu trước đi vào Cashflow. Giá trị hợp đồng được phân bổ theo thời gian/lộ trình học. Chỉ phần dịch vụ đã thực hiện tới ngày báo cáo mới là Recognized Revenue.</span></div></div>
+  <div class="grid kpis">
+    <div class="card kpi primary"><div class="label">Allocated Revenue · Aug</div><div class="value" id="kAlloc"></div><div class="desc">Doanh thu được phân bổ cho toàn bộ tháng 8 theo lộ trình.</div></div>
+    <div class="card kpi rec"><div class="label">Recognized Revenue · MTD</div><div class="value" id="kRec"></div><div class="desc">Phần đã earn tới 17/08; chưa phải full-month.</div></div>
+    <div class="card kpi"><div class="label">Deferred Revenue</div><div class="value" id="kDeferred"></div><div class="desc">Tiền đã thu nhưng dịch vụ còn phải thực hiện.</div></div>
+    <div class="card kpi"><div class="label">Cash In · Aug</div><div class="value" id="kCash"></div><div class="desc">Tiền thực tế vào tài khoản/quỹ trong tháng.</div></div>
+    <div class="card kpi primary"><div class="label">Future Allocated Revenue</div><div class="value" id="kFuture"></div><div class="desc">Revenue đã có basis và nằm ở các tháng tương lai.</div></div>
+    <div class="card kpi warn"><div class="label">Unallocated Value</div><div class="value" id="kUnalloc"></div><div class="desc">Chưa đủ dữ liệu để xếp revenue vào kỳ nào.</div></div>
+  </div>
+
+  <div class="grid definition-grid">
+    <div class="card definition alloc"><h3>1. Allocated Revenue — “doanh thu phân bổ”</h3><p>Giá trị hợp đồng được trải vào từng tháng theo lịch cung cấp dịch vụ. Ví dụ học phí thu một lần 30 triệu nhưng học 3 tháng thì revenue sẽ được phân bổ qua 3 tháng, không dồn hết vào tháng thu tiền. Với tháng hiện tại, đây là <b>full-month scheduled revenue</b>.</p></div>
+    <div class="card definition rec"><h3>2. Recognized Revenue — “doanh thu ghi nhận”</h3><p>Phần Allocated Revenue đã thực sự được earn tới ngày báo cáo. Tháng đã đóng kỳ: thường bằng Allocated Revenue. Tháng hiện tại: chỉ ghi nhận phần đã cung cấp dịch vụ tới hôm nay. Tháng tương lai: bằng 0 cho tới khi dịch vụ được thực hiện.</p></div>
+  </div>
+
+  <div class="card section chart-card">
+    <div class="head"><div><h2>Revenue Allocation → Recognized → Cash</h2><div class="sub">Chạm/click vào từng tháng để xem số chi tiết. Revenue được ưu tiên hiển thị trước Cash.</div></div>
+      <div class="controls"><button class="btn active" data-chart="2026">2026</button><button class="btn" data-chart="active">All active</button><button class="btn" data-chart="future">Current + Future</button></div>
+    </div>
+    <div class="legend"><span class="lg"><i class="dot" style="background:#6847f5"></i>Allocated Revenue</span><span class="lg"><i class="dot" style="background:#159b6b"></i>Recognized Revenue</span><span class="lg"><i class="dot" style="background:#cfc7ff"></i>Cash In</span></div>
+    <div class="chart-shell" id="chartShell"><div class="gridlines" id="gridlines"></div><div class="bar-area" id="barArea"></div></div>
+  </div>
+
+  <div class="card table-card">
+    <div class="toolbar"><div><b style="font-size:13px">Monthly Revenue Schedule</b><div class="sub">Một dòng = một tháng revenue. Cash chỉ dùng để đối chiếu.</div></div>
+      <select id="overviewPeriod" class="select"><option value="active">Active months</option><option value="Past">Past</option><option value="Current">Current</option><option value="Future">Future</option><option value="all">All</option></select>
+    </div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th class="num">Allocated Revenue</th><th class="num">Recognized Revenue</th><th class="num">Remaining / Future</th><th class="num">Cash In</th><th class="num">Deferred Balance</th><th class="num">MoM Allocation</th><th>Period</th><th>Alert</th></tr></thead><tbody id="overviewBody"></tbody></table></div>
+  </div>
+</section>
+
+<section class="page" id="page-monthly">
+  <div class="grid compare-grid">
+    <div class="card compare-panel">
+      <div class="head"><div><h2>Dynamic Month Compare</h2><div class="sub">Chọn 2 tháng — dashboard sẽ animate chênh lệch, mini-trend và growth signal.</div></div></div>
+      <div class="compare-controls">
+        <div><label>Primary month</label><select class="select" id="primaryMonth"></select></div>
+        <div class="vs">VS</div>
+        <div><label>Compare with</label><select class="select" id="compareMonth"></select></div>
+      </div>
+
+      <div class="compare-stage">
+        <div class="month-hero" id="primaryHero"></div>
+        <div class="delta-orb-wrap"><div class="delta-orb" id="deltaOrb"><div class="inside"><div class="arrow" id="deltaArrow">↑</div><div class="pct" id="deltaPct">0%</div><div class="cap">Allocated growth</div></div></div></div>
+        <div class="month-hero secondary" id="compareHero"></div>
+      </div>
+
+      <div class="compare-pulses" id="comparePulses"></div>
+      <div class="spark-card"><div class="spark-head"><span>Allocated Revenue trend around selected months</span><span id="sparkCaption"></span></div><svg id="compareSpark" viewBox="0 0 600 92" preserveAspectRatio="none"></svg></div>
+      <div class="metric-table" id="compareMetrics"></div>
+    </div>
+    <div class="card analysis">
+      <div class="head"><div><h2>Growth & Risk Analysis</h2><div class="sub">Insight tự thay đổi theo 2 tháng đang chọn.</div></div></div>
+      <div class="box" id="analysisBox"></div>
+    </div>
+  </div>
+  <div class="card table-card">
+    <div class="toolbar"><div><b style="font-size:13px">All Monthly Data</b><div class="sub">Click một dòng để đưa tháng đó vào Primary Month.</div></div></div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th class="num">Allocated</th><th class="num">Recognized</th><th class="num">Recognition %</th><th class="num">Cash In</th><th class="num">Cash - Recognized</th><th class="num">Deferred</th><th class="num">MoM</th><th>Period</th></tr></thead><tbody id="allMonthBody"></tbody></table></div>
+  </div>
+</section>
+
+<section class="page" id="page-profit">
+  <div class="note"><div class="ico">%</div><div><b>Profit split 80% / 20% áp dụng từ Aug-2026.</b><br><span>Profit thực tế phải dùng Recognized Revenue và chi phí actual. Khi chưa có chi phí T8 actual, dashboard chỉ được phép gọi là Forecast / Provisional Profit. Fixed-cost baseline lấy từ T7; toàn bộ biến phí T7 không được carry forward.</span></div></div>
+  <div class="grid profit-layout">
+    <div class="card profit-main">
+      <div class="head"><div><h2>Profit & Founder Allocation</h2><div class="sub">80% Founder · 20% Co-founder kể từ 08/2026</div></div><select id="profitMonth" class="select"></select></div>
+      <div class="input-grid">
+        <div class="input-wrap"><label>Fixed-cost baseline</label><input class="money-input" id="fixedBaselineInput" disabled></div>
+        <div class="input-wrap"><label>Forecast variable costs</label><input class="money-input" id="variableForecast" inputmode="numeric" placeholder="0"></div>
+        <div class="input-wrap"><label>Other forecast costs</label><input class="money-input" id="otherForecast" inputmode="numeric" placeholder="0"></div>
+      </div>
+      <div class="grid profit-kpis">
+        <div class="profit-mini"><div class="small muted">Allocated Revenue</div><div class="v" id="pAllocated"></div><div class="small muted">Full-month revenue plan</div></div>
+        <div class="profit-mini"><div class="small muted">Forecast Profit*</div><div class="v" id="pProfit"></div><div class="small muted">Allocated revenue less forecast costs</div></div>
+        <div class="profit-mini"><div class="small muted">Forecast Margin</div><div class="v" id="pMargin"></div><div class="small muted">Before tax / owner-specific items</div></div>
+      </div>
+      <div class="splitbar"><div class="split80"></div><div class="split20"></div></div>
+      <div class="splitlabels"><span>Founder 80%</span><span>Co-founder 20%</span></div>
+      <div class="grid profit-kpis">
+        <div class="profit-mini"><div class="small muted">Founder 80%</div><div class="v" id="founderShare"></div></div>
+        <div class="profit-mini"><div class="small muted">Co-founder 20%</div><div class="v" id="cofounderShare"></div></div>
+        <div class="profit-mini"><div class="small muted">Split Starts</div><div class="v">Aug-26</div></div>
+      </div>
+      <div class="input-grid" style="grid-template-columns:1fr 1fr">
+        <div class="input-wrap"><label>Actual expenses to date (optional)</label><input class="money-input" id="actualExpenseInput" inputmode="numeric" placeholder="Nhập khi có chi phí actual T8"></div>
+        <div class="profit-mini"><div class="small muted">Recognized Profit to Date</div><div class="v" id="recognizedProfit">N/A</div><div class="small muted">Recognized Revenue – Actual expenses to date</div></div>
+      </div>
+      <div class="assumption" id="profitWarning"></div>
+    </div>
+    <div class="card cost-base">
+      <div class="head"><div><h2>July Cost Baseline</h2><div class="sub">Nguồn: file chi phí vận hành T7/2026</div></div></div>
+      <div class="cost-total" id="fixedTotal"></div>
+      <div class="small muted">Fixed costs carried as baseline into Aug+ forecast</div>
+      <div class="cost-list" id="fixedCostList"></div>
+      <div class="cost-line" style="margin-top:8px"><span><span class="badge variable">Not carried</span> July variable costs</span><b id="varJuly"></b></div>
+      <div class="cost-line"><span>↳ Teacher payroll inside variable costs</span><b id="teacherJuly"></b></div>
+      <div class="cost-line"><span>July actual total cost</span><b id="julyTotal"></b></div>
+    </div>
+  </div>
+
+  <div class="accum-section">
+    <div class="grid accum-layout">
+      <div class="card accum-main">
+        <div class="head">
+          <div><h2>Founder Accumulation — Jan → Current</h2><div class="sub">Founder A = 100% trước Aug-2026, 80% từ Aug. Founder B = 0% trước Aug, bắt đầu 20% từ Aug.</div></div>
+          <span class="badge fixed">Split start: Aug-26</span>
+        </div>
+        <div class="grid accum-kpis">
+          <div class="accum-kpi a"><span>Founder A accumulated*</span><b id="accFounderA"></b></div>
+          <div class="accum-kpi b"><span>Founder B accumulated*</span><b id="accFounderB"></b></div>
+          <div class="accum-kpi"><span>Known / provisional profit</span><b id="accProfit"></b></div>
+          <div class="accum-kpi"><span>Cost coverage</span><b id="accCoverage"></b></div>
+        </div>
+        <div class="accum-chart" id="accumChart"></div>
+        <div class="small muted" style="margin-top:11px">* Accumulation chỉ cộng những tháng có cost basis. Tháng thiếu chi phí sẽ không bị giả định bằng 0.</div>
+        <div class="coverage"><i id="coverageBar"></i></div>
+      </div>
+
+      <div class="card growth-card">
+        <div class="head"><div><h2>Growth & Cost Analysis</h2><div class="sub">Revenue growth, margin, cost mix và founder contribution.</div></div></div>
+        <div class="growth-list" id="growthAnalysis"></div>
+        <div style="margin-top:14px"><div class="small muted" style="font-weight:850;text-transform:uppercase">July cost composition</div>
+          <div class="cost-composition"><div class="cost-fixed" id="fixedCostBar"></div><div class="cost-variable" id="variableCostBar"></div></div>
+          <div class="cost-legend"><span><i class="dot" style="background:#6847f5"></i> Fixed</span><span><i class="dot" style="background:#d9901f"></i> Variable</span><span id="teacherShareLegend"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card table-card">
+      <div class="toolbar">
+        <div><b style="font-size:13px">Monthly Profit Basis & Founder Accumulation</b><div class="sub">Jan–Jun chưa có cost data: nhập actual expense để cumulative chạy đúng. Jul dùng actual cost; Aug dùng actual nếu nhập, nếu chưa thì dùng provisional forecast.</div></div>
+        <button class="btn ghost" id="resetCostInputs">Reset Jan–Jun inputs</button>
+      </div>
+      <div class="scroll"><table>
+        <thead><tr><th>Month</th><th class="num">Recognized Revenue</th><th>Cost Basis</th><th class="num">Expense</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">A %</th><th class="num">B %</th><th class="num">A Monthly</th><th class="num">B Monthly</th><th class="num">A Accum.</th><th class="num">B Accum.</th></tr></thead>
+        <tbody id="accumBody"></tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<section class="page" id="page-ledger">
+  <div class="note"><div class="ico">↕</div><div><b>Đây là nơi đối chiếu dòng tiền IN / OUT theo ngày.</b><br><span>IN lấy từ Cashflow_Log học phí. OUT hiện mới có dữ liệu chi phí tháng 07/2026 từ file bạn vừa thêm. Fixed-cost baseline T8 là forecast assumption, không phải cash-out transaction nên không được đưa giả vào ledger.</span></div></div>
+  <div class="grid ledger-top">
+    <div class="card ledger-kpi in"><div class="small muted">Filtered Cash In</div><div class="v" id="ledgerIn"></div></div>
+    <div class="card ledger-kpi out"><div class="small muted">Filtered Cash Out</div><div class="v" id="ledgerOut"></div></div>
+    <div class="card ledger-kpi net"><div class="small muted">Net Cash Flow</div><div class="v" id="ledgerNet"></div></div>
+  </div>
+  <div class="card table-card">
+    <div class="toolbar">
+      <div><b style="font-size:13px">Daily Cash Ledger</b><div class="sub">Log từng giao dịch theo ngày để trace từ tổng tháng xuống source transaction.</div></div>
+      <div class="controls">
+        <select id="ledgerMonth" class="select"></select>
+        <select id="ledgerDir" class="select"><option value="all">IN + OUT</option><option value="IN">Cash IN</option><option value="OUT">Cash OUT</option></select>
+        <input id="ledgerSearch" class="field search" placeholder="Search student / expense / ref...">
+        <select id="ledgerView" class="select"><option value="transactions">Transactions</option><option value="daily">Daily Summary</option></select>
+        <button class="btn" id="downloadLedger">Export filtered CSV</button>
+      </div>
+    </div>
+    <div class="scroll"><table><thead id="ledgerHead"></thead><tbody id="ledgerBody"></tbody></table></div>
+  </div>
+</section>
+
+<section class="page" id="page-alerts">
+  <div class="grid alert-grid">
+    <div class="card health"><div class="head"><div><h2>Contract Health</h2><div class="sub">Revenue allocation / source data checks</div></div></div><div class="health-grid" id="healthGrid"></div></div>
+    <div class="card alert-list"><div class="toolbar"><div><b style="font-size:13px">Alert Center</b><div class="sub">Ưu tiên xử lý Critical trước khi dùng revenue forecast cho quyết định.</div></div><select id="alertFilter" class="select"><option value="all">All</option><option value="CRITICAL">Critical</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option></select></div><div id="alertRows"></div></div>
+  </div>
+</section>
+
+<div class="footer">Live Finance Intelligence mapped from ZE CenterOS student, tuition, payment and expense records. All figures shown in VND.</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const D={"asOf": "17 Aug 2026", "monthly": [{"month": "2025-01", "label": "Jan 2025", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 0.0, "cumRecognized": 0.0, "deferred": 0.0, "earnedNotCollected": 0.0, "mom": null, "period": "Past", "alert": ""}, {"month": "2025-02", "label": "Feb 2025", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 0.0, "cumRecognized": 0.0, "deferred": 0.0, "earnedNotCollected": 0.0, "mom": null, "period": "Past", "alert": ""}, {"month": "2025-03", "label": "Mar 2025", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 0.0, "cumRecognized": 0.0, "deferred": 0.0, "earnedNotCollected": 0.0, "mom": null, "period": "Past", "alert": ""}, {"month": "2025-04", "label": "Apr 2025", "cash": 0.0, "allocated": 1380821.917808219, "recognized": 1380821.917808219, "remaining": 0.0, "gap": -1380821.917808219, "cumCash": 0.0, "cumRecognized": 1380821.917808219, "deferred": 0.0, "earnedNotCollected": 1380821.917808219, "mom": null, "period": "Past", "alert": ""}, {"month": "2025-05", "label": "May 2025", "cash": 0.0, "allocated": 2140273.97260274, "recognized": 2140273.97260274, "remaining": 0.0, "gap": -2140273.97260274, "cumCash": 0.0, "cumRecognized": 3521095.890410959, "deferred": 0.0, "earnedNotCollected": 3521095.890410959, "mom": 0.5500000000000003, "period": "Past", "alert": ""}, {"month": "2025-06", "label": "Jun 2025", "cash": 0.0, "allocated": 2071232.8767123288, "recognized": 2071232.8767123288, "remaining": 0.0, "gap": -2071232.8767123288, "cumCash": 0.0, "cumRecognized": 5592328.767123288, "deferred": 0.0, "earnedNotCollected": 5592328.767123288, "mom": -0.032258064516129115, "period": "Past", "alert": ""}, {"month": "2025-07", "label": "Jul 2025", "cash": 0.0, "allocated": 2140273.97260274, "recognized": 2140273.97260274, "remaining": 0.0, "gap": -2140273.97260274, "cumCash": 0.0, "cumRecognized": 7732602.7397260275, "deferred": 0.0, "earnedNotCollected": 7732602.7397260275, "mom": 0.03333333333333344, "period": "Past", "alert": ""}, {"month": "2025-08", "label": "Aug 2025", "cash": 0.0, "allocated": 2140273.97260274, "recognized": 2140273.97260274, "remaining": 0.0, "gap": -2140273.97260274, "cumCash": 0.0, "cumRecognized": 9872876.712328767, "deferred": 0.0, "earnedNotCollected": 9872876.712328767, "mom": 0.0, "period": "Past", "alert": ""}, {"month": "2025-09", "label": "Sep 2025", "cash": 72000000.0, "allocated": 6081359.45899081, "recognized": 6081359.45899081, "remaining": 0.0, "gap": 65918640.54100919, "cumCash": 72000000.0, "cumRecognized": 15954236.171319578, "deferred": 56045763.828680426, "earnedNotCollected": 0.0, "mom": 1.8413929883917635, "period": "Past", "alert": ""}, {"month": "2025-10", "label": "Oct 2025", "cash": 38000000.0, "allocated": 9664879.48673487, "recognized": 9664879.48673487, "remaining": 0.0, "gap": 28335120.51326513, "cumCash": 110000000.0, "cumRecognized": 25619115.65805445, "deferred": 84380884.34194556, "earnedNotCollected": 0.0, "mom": 0.5892629850133442, "period": "Past", "alert": ""}, {"month": "2025-11", "label": "Nov 2025", "cash": 41000000.0, "allocated": 20023744.543542344, "recognized": 20023744.543542344, "remaining": 0.0, "gap": 20976255.456457656, "cumCash": 151000000.0, "cumRecognized": 45642860.2015968, "deferred": 105357139.7984032, "earnedNotCollected": 0.0, "mom": 1.0718048860335094, "period": "Past", "alert": ""}, {"month": "2025-12", "label": "Dec 2025", "cash": 61200000.0, "allocated": 36124482.63397163, "recognized": 36124482.63397163, "remaining": 0.0, "gap": 25075517.36602837, "cumCash": 212200000.0, "cumRecognized": 81767342.83556843, "deferred": 130432657.16443157, "earnedNotCollected": 0.0, "mom": 0.8040822761905326, "period": "Past", "alert": ""}, {"month": "2026-01", "label": "Jan 2026", "cash": 132600000.0, "allocated": 55488790.38047954, "recognized": 55488790.38047954, "remaining": 0.0, "gap": 77111209.61952046, "cumCash": 344800000.0, "cumRecognized": 137256133.21604797, "deferred": 207543866.78395203, "earnedNotCollected": 0.0, "mom": 0.5360438775750831, "period": "Past", "alert": ""}, {"month": "2026-02", "label": "Feb 2026", "cash": 141000000.0, "allocated": 83858653.63210563, "recognized": 83858653.63210563, "remaining": 0.0, "gap": 57141346.36789437, "cumCash": 485800000.0, "cumRecognized": 221114786.8481536, "deferred": 264685213.1518464, "earnedNotCollected": 0.0, "mom": 0.5112719714576146, "period": "Past", "alert": ""}, {"month": "2026-03", "label": "Mar 2026", "cash": 139880000.0, "allocated": 101779611.58915803, "recognized": 101779611.58915803, "remaining": 0.0, "gap": 38100388.41084197, "cumCash": 625680000.0, "cumRecognized": 322894398.43731165, "deferred": 302785601.56268835, "earnedNotCollected": 0.0, "mom": 0.21370433677212386, "period": "Past", "alert": ""}, {"month": "2026-04", "label": "Apr 2026", "cash": 42450000.0, "allocated": 99161162.9889153, "recognized": 99161162.9889153, "remaining": 0.0, "gap": -56711162.988915294, "cumCash": 668130000.0, "cumRecognized": 422055561.426227, "deferred": 246074438.57377303, "earnedNotCollected": 0.0, "mom": -0.025726651530291966, "period": "Past", "alert": ""}, {"month": "2026-05", "label": "May 2026", "cash": 90400000.0, "allocated": 81171468.04349212, "recognized": 81171468.04349212, "remaining": 0.0, "gap": 9228531.956507877, "cumCash": 758530000.0, "cumRecognized": 503227029.4697191, "deferred": 255302970.5302809, "earnedNotCollected": 0.0, "mom": -0.1814187571341226, "period": "Past", "alert": ""}, {"month": "2026-06", "label": "Jun 2026", "cash": 126990000.0, "allocated": 79025580.71037704, "recognized": 79025580.71037704, "remaining": 0.0, "gap": 47964419.28962296, "cumCash": 885520000.0, "cumRecognized": 582252610.1800961, "deferred": 303267389.81990385, "earnedNotCollected": 0.0, "mom": -0.02643647312089159, "period": "Past", "alert": ""}, {"month": "2026-07", "label": "Jul 2026", "cash": 73970000.0, "allocated": 102808244.50121684, "recognized": 102808244.50121684, "remaining": 0.0, "gap": -28838244.501216844, "cumCash": 959490000.0, "cumRecognized": 685060854.681313, "deferred": 274429145.31868696, "earnedNotCollected": 0.0, "mom": 0.30094892789211536, "period": "Past", "alert": ""}, {"month": "2026-08", "label": "Aug 2026", "cash": 48250000.0, "allocated": 109947630.80364555, "recognized": 61774785.95831161, "remaining": 48172844.84533394, "gap": -13524785.95831161, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": 0.06944371375142211, "period": "Current", "alert": "CURRENT MONTH"}, {"month": "2026-09", "label": "Sep 2026", "cash": 0.0, "allocated": 92452907.26708612, "recognized": 0.0, "remaining": 92452907.26708612, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.1591186950431256, "period": "Future", "alert": ""}, {"month": "2026-10", "label": "Oct 2026", "cash": 0.0, "allocated": 50616441.18965452, "recognized": 0.0, "remaining": 50616441.18965452, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.45251650071501504, "period": "Future", "alert": "WATCH: >40% MoM allocated revenue drop"}, {"month": "2026-11", "label": "Nov 2026", "cash": 0.0, "allocated": 19630705.60592585, "recognized": 0.0, "remaining": 19630705.60592585, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.6121674075747119, "period": "Future", "alert": "WATCH: >40% MoM allocated revenue drop"}, {"month": "2026-12", "label": "Dec 2026", "cash": 0.0, "allocated": 11049718.204013053, "recognized": 0.0, "remaining": 11049718.204013053, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.43712068094600154, "period": "Future", "alert": "WATCH: >40% MoM allocated revenue drop"}, {"month": "2027-01", "label": "Jan 2027", "cash": 0.0, "allocated": 6833898.26136305, "recognized": 0.0, "remaining": 6833898.26136305, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.38153189654365083, "period": "Future", "alert": ""}, {"month": "2027-02", "label": "Feb 2027", "cash": 0.0, "allocated": 6172553.268327916, "recognized": 0.0, "remaining": 6172553.268327916, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.09677419354838712, "period": "Future", "alert": ""}, {"month": "2027-03", "label": "Mar 2027", "cash": 0.0, "allocated": 5277121.704586493, "recognized": 0.0, "remaining": 5277121.704586493, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.14506664014322668, "period": "Future", "alert": ""}, {"month": "2027-04", "label": "Apr 2027", "cash": 0.0, "allocated": 3866197.1830985914, "recognized": 0.0, "remaining": 3866197.1830985914, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.2673663031613669, "period": "Future", "alert": ""}, {"month": "2027-05", "label": "May 2027", "cash": 0.0, "allocated": 3995070.4225352113, "recognized": 0.0, "remaining": 3995070.4225352113, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": 0.03333333333333344, "period": "Future", "alert": ""}, {"month": "2027-06", "label": "Jun 2027", "cash": 0.0, "allocated": 3866197.1830985914, "recognized": 0.0, "remaining": 3866197.1830985914, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.032258064516129115, "period": "Future", "alert": ""}, {"month": "2027-07", "label": "Jul 2027", "cash": 0.0, "allocated": 3350704.2253521127, "recognized": 0.0, "remaining": 3350704.2253521127, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -0.1333333333333333, "period": "Future", "alert": ""}, {"month": "2027-08", "label": "Aug 2027", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": -1.0, "period": "Future", "alert": "WATCH: >40% MoM allocated revenue drop"}, {"month": "2027-09", "label": "Sep 2027", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": null, "period": "Future", "alert": ""}, {"month": "2027-10", "label": "Oct 2027", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": null, "period": "Future", "alert": ""}, {"month": "2027-11", "label": "Nov 2027", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": null, "period": "Future", "alert": ""}, {"month": "2027-12", "label": "Dec 2027", "cash": 0.0, "allocated": 0.0, "recognized": 0.0, "remaining": 0.0, "gap": 0.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246, "deferred": 260904359.3603754, "earnedNotCollected": 0.0, "mom": null, "period": "Future", "alert": ""}], "ledger": [{"date": "2026-08-12", "month": "2026-08", "direction": "IN", "ref": "RC0062", "party": "200100-Smartlog - cty", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản · Lần 2", "amount": 34500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-08-11", "month": "2026-08", "direction": "IN", "ref": "RC0063", "party": "100247-Đỗ Bảo Long", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-08-03", "month": "2026-08", "direction": "IN", "ref": "RC0061", "party": "100246-Lê Nguyễn Bảo Minh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 4250000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-30", "month": "2026-07", "direction": "IN", "ref": "RC0060", "party": "100245-Huỳnh Thiên Bảo", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-27", "month": "2026-07", "direction": "IN", "ref": "RC0059", "party": "100244-Đặng Thanh Ngân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 20000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-24", "month": "2026-07", "direction": "IN", "ref": "RC0058", "party": "100243-Cao Thanh Mỹ Ngọc", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-20", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-012", "party": "Notion Labs", "category": "Nền tảng / Phần mềm", "costType": "Cố định", "detail": "Notion – gói làm việc/quản trị T7/2026", "amount": 1700000.0, "accrualCost": 1700000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-17", "month": "2026-07", "direction": "IN", "ref": "RC0057", "party": "100241-Nguyễn Thành Đức", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 7500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-010", "party": "Đặng Hoàng Nam", "category": "Lương nhân sự vận hành", "costType": "Cố định", "detail": "Lương T6/2026 chi trả T7 – Đặng Hoàng Nam (ZFE260601)", "amount": 450000.0, "accrualCost": 450000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-009", "party": "Nguyễn Hoàng Minh", "category": "Lương nhân sự vận hành", "costType": "Cố định", "detail": "Lương T6/2026 chi trả T7 – Nguyễn Hoàng Minh (ZFE260501)", "amount": 1075000.0, "accrualCost": 1075000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-008", "party": "Nguyễn Đức Thịnh (Mr.Thịnh)", "category": "Lương nhân sự vận hành", "costType": "Cố định", "detail": "Lương T6/2026 chi trả T7 – Nguyễn Đức Thịnh (Mr.Thịnh) (ZFE251003)", "amount": 2000000.0, "accrualCost": 2000000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-007", "party": "Trương Ngọc Mai (Ms.Mai)", "category": "Lương nhân sự vận hành", "costType": "Cố định", "detail": "Lương T6/2026 chi trả T7 – Trương Ngọc Mai (Ms.Mai) (ZFE250803)", "amount": 2200000.0, "accrualCost": 2200000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-006", "party": "Nguyễn Minh Khang (Mr.Khang)", "category": "Lương nhân sự vận hành", "costType": "Cố định", "detail": "Lương T6/2026 chi trả T7 – Nguyễn Minh Khang (Mr.Khang) (ZFE250801)", "amount": 2000000.0, "accrualCost": 2000000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-005", "party": "Nguyễn Hoàng Dũng (Mr.Dũng)", "category": "Lương giảng viên", "costType": "Biến đổi", "detail": "Lương T6/2026 chi trả T7 – Nguyễn Hoàng Dũng (Mr.Dũng) (ZFE250701)", "amount": 5289300.0, "accrualCost": 5289300.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-004", "party": "Trần Thị Hồng Nhung", "category": "Lương giảng viên", "costType": "Biến đổi", "detail": "Lương T6/2026 chi trả T7 – Trần Thị Hồng Nhung (ZFE231001)", "amount": 1275000.0, "accrualCost": 1275000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-003", "party": "Katharine Jane Bourchier", "category": "Lương giảng viên", "costType": "Biến đổi", "detail": "Lương T6/2026 chi trả T7 – Katharine Jane Bourchier (ZFE260601)", "amount": 9050000.0, "accrualCost": 9050000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-002", "party": "Trần Thanh Phong (Mr.Phong)", "category": "Lương giảng viên", "costType": "Biến đổi", "detail": "Lương T6/2026 chi trả T7 – Trần Thanh Phong (Mr.Phong) (ZFE250801)", "amount": 11400000.0, "accrualCost": 11400000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-05", "month": "2026-07", "direction": "IN", "ref": "RC0056", "party": "100222-Nguyễn Dương Tường Vy", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-04", "month": "2026-07", "direction": "IN", "ref": "RC0055", "party": "100225-Phan Mai Phương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9000000.0, "method": "Chuyển khoản", "note": "KM 490K", "status": "Received"}, {"date": "2026-07-04", "month": "2026-07", "direction": "IN", "ref": "RC0054", "party": "100240-Huỳnh Gia Nghi", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-020", "party": "NCC hoá đơn ĐT", "category": "Thuế / Phí", "costType": "Cố định", "detail": "Phí dịch vụ xuất hoá đơn điện tử T7/2026", "amount": 500000.0, "accrualCost": 500000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-019", "party": "Đơn vị nhân sự", "category": "Dịch vụ thuê ngoài", "costType": "Cố định", "detail": "Nhân sự thuê ngoài – T7/2026 (1.500.000đ/tháng, thanh toán theo quý)", "amount": 1500000.0, "accrualCost": 1500000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-018", "party": "Đơn vị kế toán", "category": "Dịch vụ thuê ngoài", "costType": "Cố định", "detail": "Kế toán thuê ngoài – phân bổ 1/3 phí quý (5.011.000đ / 3 tháng)", "amount": 1670333.0, "accrualCost": 1670333.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-017", "party": "Nhiều NCC", "category": "Cơ sở vật chất / VPP", "costType": "Biến đổi", "detail": "Cơ sở vật chất, giấy, nước uống T7/2026", "amount": 200000.0, "accrualCost": 200000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-016", "party": "Cô Thảo", "category": "Vệ sinh / Tạp vụ", "costType": "Cố định", "detail": "Lương tạp vụ – cô Thảo giúp việc T7/2026", "amount": 900000.0, "accrualCost": 900000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-015", "party": "Cấp nước", "category": "Điện nước", "costType": "Biến đổi", "detail": "Tiền nước tháng 07/2026", "amount": 300000.0, "accrualCost": 300000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-014", "party": "EVN", "category": "Điện nước", "costType": "Biến đổi", "detail": "Tiền điện tháng 07/2026", "amount": 1200000.0, "accrualCost": 1200000.0, "method": "", "note": "Biến đổi · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-013", "party": "Google", "category": "Nền tảng / Phần mềm", "costType": "Cố định", "detail": "Google Workspace – 25 USD (tỷ giá 26.000 ≈ 650.000đ)", "amount": 650000.0, "accrualCost": 650000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-07-01", "month": "2026-07", "direction": "OUT", "ref": "EXP-2607-011", "party": "Chủ mặt bằng", "category": "Thuê mặt bằng", "costType": "Cố định", "detail": "Thuê văn phòng vận hành + 2 phòng học – T7/2026", "amount": 10000000.0, "accrualCost": 10000000.0, "method": "", "note": "Cố định · Đã thanh toán", "status": "Đã thanh toán"}, {"date": "2026-06-30", "month": "2026-06", "direction": "IN", "ref": "RC0053", "party": "100111-Nguyễn Minh Nhật", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 10000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-06-30", "month": "2026-06", "direction": "IN", "ref": "RC0038", "party": "100230-Nguyễn Lê Thu Nhàn", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 3", "amount": 2000000.0, "method": "Chuyển khoản", "note": "3 kỳ", "status": "Received"}, {"date": "2026-06-30", "month": "2026-06", "direction": "IN", "ref": "RC0037", "party": "100229-Lê Thị Trúc Mai", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 3", "amount": 2000000.0, "method": "Chuyển khoản", "note": "3 kỳ", "status": "Received"}, {"date": "2026-06-23", "month": "2026-06", "direction": "IN", "ref": "RC0052", "party": "100239-Huỳnh Đình Minh Thành", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-06-22", "month": "2026-06", "direction": "IN", "ref": "RC0051", "party": "100238-Nguyễn Vũ Quỳnh Giao", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-06-22", "month": "2026-06", "direction": "IN", "ref": "RC0050", "party": "100215-Phạm Bảo Ngọc", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 17000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-06-22", "month": "2026-06", "direction": "IN", "ref": "RC0049", "party": "100237-Phùng Tô Tiến Mạnh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8000000.0, "method": "Chuyển khoản", "note": "trừ 490", "status": "Received"}, {"date": "2026-06-17", "month": "2026-06", "direction": "IN", "ref": "RC0048", "party": "100234-Trương Nguyễn Hoàng Minh Tú", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 6000000.0, "method": "Chuyển khoản", "note": "Giamr 2tr", "status": "Received"}, {"date": "2026-06-17", "month": "2026-06", "direction": "IN", "ref": "RC0047", "party": "100223-Hồ Thị Hồng Vân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 3000000.0, "method": "Trả góp", "note": "3 kỳ", "status": "Received"}, {"date": "2026-06-15", "month": "2026-06", "direction": "IN", "ref": "RC0062", "party": "200100-Smartlog - cty", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản · Lần 1", "amount": 46000000.0, "method": "Chuyển khoản", "note": "0.4", "status": "Received"}, {"date": "2026-06-15", "month": "2026-06", "direction": "IN", "ref": "RC0046", "party": "100236-Trương Ngọc Thúy Vy", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-06-15", "month": "2026-06", "direction": "IN", "ref": "RC0045", "party": "100235-Trương Phương Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-30", "month": "2026-05", "direction": "IN", "ref": "RC0038", "party": "100230-Nguyễn Lê Thu Nhàn", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 2", "amount": 3000000.0, "method": "Trả góp", "note": "3 kỳ", "status": "Received"}, {"date": "2026-05-28", "month": "2026-05", "direction": "IN", "ref": "RC0042", "party": "100228-Nguyễn Hoàng Thúy Quyên", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 2", "amount": 4000000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-05-27", "month": "2026-05", "direction": "IN", "ref": "RC0044", "party": "100233-Trần Võ Quốc Tiến", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 52900000.0, "method": "Chuyển khoản", "note": "CK: 2tr", "status": "Received"}, {"date": "2026-05-27", "month": "2026-05", "direction": "IN", "ref": "RC0041", "party": "100226-Hứa Trần Vân Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 2", "amount": 4000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-27", "month": "2026-05", "direction": "IN", "ref": "RC0040", "party": "100227-Trần Thị Huệ", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 2", "amount": 4000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-27", "month": "2026-05", "direction": "IN", "ref": "RC0033", "party": "100224-Nguyễn Ngọc Quỳnh Như", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 3", "amount": 2500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-20", "month": "2026-05", "direction": "IN", "ref": "RC0037", "party": "100229-Lê Thị Trúc Mai", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 2", "amount": 3000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-18", "month": "2026-05", "direction": "IN", "ref": "RC0034", "party": "100223-Hồ Thị Hồng Vân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản · Lần 3", "amount": 2500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-05-04", "month": "2026-05", "direction": "IN", "ref": "RC0043", "party": "100232-Lê Thị Tuyết Mai", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 14500000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-04-25", "month": "2026-04", "direction": "IN", "ref": "RC0042", "party": "100228-Nguyễn Hoàng Thúy Quyên", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 4000000.0, "method": "Trả góp", "note": "2 kỳ", "status": "Received"}, {"date": "2026-04-25", "month": "2026-04", "direction": "IN", "ref": "RC0041", "party": "100226-Hứa Trần Vân Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 4000000.0, "method": "Trả góp", "note": "2 kỳ", "status": "Received"}, {"date": "2026-04-25", "month": "2026-04", "direction": "IN", "ref": "RC0040", "party": "100227-Trần Thị Huệ", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 4000000.0, "method": "Trả góp", "note": "2 kỳ", "status": "Received"}, {"date": "2026-04-24", "month": "2026-04", "direction": "IN", "ref": "RC0033", "party": "100224-Nguyễn Ngọc Quỳnh Như", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 2", "amount": 2500000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-04-23", "month": "2026-04", "direction": "IN", "ref": "RC0039", "party": "100231-Trương Đình Sáng", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 7000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-04-20", "month": "2026-04", "direction": "IN", "ref": "RC0038", "party": "100230-Nguyễn Lê Thu Nhàn", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 3000000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-04-20", "month": "2026-04", "direction": "IN", "ref": "RC0037", "party": "100229-Lê Thị Trúc Mai", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 3000000.0, "method": "Trả góp", "note": "3 kỳ", "status": "Received"}, {"date": "2026-04-20", "month": "2026-04", "direction": "IN", "ref": "RC0034", "party": "100223-Hồ Thị Hồng Vân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 2", "amount": 2500000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-04-17", "month": "2026-04", "direction": "IN", "ref": "RC0036", "party": "100143-Cao Ngọc Hồng Sương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp", "amount": 3000000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-04-05", "month": "2026-04", "direction": "IN", "ref": "RC0035", "party": "100225-Phan Mai Phương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9450000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-20", "month": "2026-03", "direction": "IN", "ref": "RC0034", "party": "100223-Hồ Thị Hồng Vân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 2500000.0, "method": "Trả góp", "note": "3 kỳ", "status": "Received"}, {"date": "2026-03-20", "month": "2026-03", "direction": "IN", "ref": "RC0033", "party": "100224-Nguyễn Ngọc Quỳnh Như", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Trả góp · Lần 1", "amount": 2500000.0, "method": "Trả góp", "note": "3 kỳ", "status": "Received"}, {"date": "2026-03-19", "month": "2026-03", "direction": "IN", "ref": "RC0032", "party": "100210-Phạm Hào Cường", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9450000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-17", "month": "2026-03", "direction": "IN", "ref": "RC0031", "party": "100216-Nguyễn Đỗ Hồng Minh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 7000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-17", "month": "2026-03", "direction": "IN", "ref": "RC0030", "party": "100211-Vương Ngọc Lan Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9450000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-16", "month": "2026-03", "direction": "IN", "ref": "RC0029", "party": "100192-Tạ Phương Nghi", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Tiền mặt", "amount": 29000000.0, "method": "Tiền mặt", "note": "", "status": "Received"}, {"date": "2026-03-12", "month": "2026-03", "direction": "IN", "ref": "RC0028", "party": "100222-Nguyễn Dương Tường Vy", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-07", "month": "2026-03", "direction": "IN", "ref": "RC0027", "party": "100143-Cao Ngọc Hồng Sương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 12000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-07", "month": "2026-03", "direction": "IN", "ref": "RC0026", "party": "100146-Trần Hạ Ngọc Trâm", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 12000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-07", "month": "2026-03", "direction": "IN", "ref": "RC0025", "party": "100148-Nguyễn Thị Như Ý", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 12000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-03", "month": "2026-03", "direction": "IN", "ref": "RC0024", "party": "100190-Bùi Thị Hồng Phương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9490000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-03-02", "month": "2026-03", "direction": "IN", "ref": "RC0023", "party": "100221-Trần Quốc Anh", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 25000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-08", "month": "2026-02", "direction": "IN", "ref": "RC0022", "party": "100207-Lưu Gia Phát", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 25000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-07", "month": "2026-02", "direction": "IN", "ref": "RC0021", "party": "100197-Nguyễn Thanh Trúc", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 10000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-07", "month": "2026-02", "direction": "IN", "ref": "RC0020", "party": "100198-Võ Trịnh Uyên Phương", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 10000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-07", "month": "2026-02", "direction": "IN", "ref": "RC0019", "party": "100220-Đỗ Trung Dũng", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-06", "month": "2026-02", "direction": "IN", "ref": "RC0018", "party": "100219-Lê Trần Hải Phú", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Tiền mặt", "amount": 45000000.0, "method": "Tiền mặt", "note": "", "status": "Received"}, {"date": "2026-02-05", "month": "2026-02", "direction": "IN", "ref": "RC0017", "party": "100202-Nguyễn Minh Quân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 13000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-02-04", "month": "2026-02", "direction": "IN", "ref": "RC0016", "party": "100213-Phạm Quang Bảo Trân", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 29000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-01-26", "month": "2026-01", "direction": "IN", "ref": "RC0015", "party": "100153-Dương Quốc Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 7000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-01-24", "month": "2026-01", "direction": "IN", "ref": "RC0014", "party": "100217-Trần Tuệ Nghi", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 31200000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-01-24", "month": "2026-01", "direction": "IN", "ref": "RC0013", "party": "100218-Lê Công Hưng", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 31200000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-01-23", "month": "2026-01", "direction": "IN", "ref": "RC0012", "party": "100204-Nguyễn Thị Ngọc Sang", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2026-01-05", "month": "2026-01", "direction": "IN", "ref": "RC0011", "party": "100161-Trần Thị Thùy Linh", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Trả góp", "amount": 25200000.0, "method": "Trả góp", "note": "", "status": "Received"}, {"date": "2026-01-02", "month": "2026-01", "direction": "IN", "ref": "RC0010", "party": "100216-Nguyễn Đỗ Hồng Minh", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 29000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-12-27", "month": "2025-12", "direction": "IN", "ref": "RC0009", "party": "100215-Phạm Bảo Ngọc", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 9000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-12-23", "month": "2025-12", "direction": "IN", "ref": "RC0008", "party": "100214-Trương Huỳnh Việt Thanh", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Học bổng", "amount": 24000000.0, "method": "Học bổng", "note": "", "status": "Received"}, {"date": "2025-12-01", "month": "2025-12", "direction": "IN", "ref": "RC0007", "party": "100208-Trần Thị Nhất An", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 28200000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-11-26", "month": "2025-11", "direction": "IN", "ref": "RC0006", "party": "100211-Vương Ngọc Lan Anh", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-11-20", "month": "2025-11", "direction": "IN", "ref": "RC0005", "party": "100210-Phạm Hào Cường", "category": "Tuition / Contract Collection", "detail": "Phiếu thu · Chuyển khoản", "amount": 8000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-11-06", "month": "2025-11", "direction": "IN", "ref": "RC0004", "party": "100209-Nguyễn Ngọc Nga", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Tiền mặt", "amount": 25000000.0, "method": "Tiền mặt", "note": "", "status": "Received"}, {"date": "2025-10-14", "month": "2025-10", "direction": "IN", "ref": "RC0003", "party": "100206-Hà Quỳnh Hương", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Tiền mặt", "amount": 38000000.0, "method": "Tiền mặt", "note": "", "status": "Received"}, {"date": "2025-09-07", "month": "2025-09", "direction": "IN", "ref": "RC0002", "party": "100195-Nguyễn Thị Anh Thư", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 36000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}, {"date": "2025-09-07", "month": "2025-09", "direction": "IN", "ref": "RC0001", "party": "100196-Nguyễn Thanh Thảo", "category": "Tuition / Contract Collection", "detail": "Hợp đồng · Chuyển khoản", "amount": 36000000.0, "method": "Chuyển khoản", "note": "", "status": "Received"}], "alerts": [{"id": "RC0001", "student": "100196-Nguyễn Thanh Thảo", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "7", "note": "", "action": "No action"}, {"id": "RC0002", "student": "100195-Nguyễn Thị Anh Thư", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "8", "note": "", "action": "No action"}, {"id": "RC0003", "student": "100206-Hà Quỳnh Hương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "9", "note": "", "action": "No action"}, {"id": "RC0004", "student": "100209-Nguyễn Ngọc Nga", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 3200000.0, "source": "10", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0005", "student": "100210-Phạm Hào Cường", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "11", "note": "", "action": "No action"}, {"id": "RC0006", "student": "100211-Vương Ngọc Lan Anh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "12", "note": "", "action": "No action"}, {"id": "RC0007", "student": "100208-Trần Thị Nhất An", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "13", "note": "", "action": "No action"}, {"id": "RC0008", "student": "100214-Trương Huỳnh Việt Thanh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "14", "note": "", "action": "No action"}, {"id": "RC0009", "student": "100215-Phạm Bảo Ngọc", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "15", "note": "", "action": "No action"}, {"id": "RC0010", "student": "100216-Nguyễn Đỗ Hồng Minh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "16", "note": "", "action": "No action"}, {"id": "RC0011", "student": "100161-Trần Thị Thùy Linh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "17", "note": "", "action": "No action"}, {"id": "RC0012", "student": "100204-Nguyễn Thị Ngọc Sang", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "18", "note": "", "action": "No action"}, {"id": "RC0013", "student": "100218-Lê Công Hưng", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "19", "note": "", "action": "No action"}, {"id": "RC0014", "student": "100217-Trần Tuệ Nghi", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "20", "note": "", "action": "No action"}, {"id": "RC0015", "student": "100153-Dương Quốc Anh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "21", "note": "", "action": "No action"}, {"id": "RC0016", "student": "100213-Phạm Quang Bảo Trân", "severity": "CRITICAL", "alert": "CRITICAL: Missing allocation basis", "exposure": 29000000.0, "source": "22", "note": "Invalid duration value (looks like date serial)", "action": "Complete service period/session plan and resolve allocation gap"}, {"id": "RC0017", "student": "100202-Nguyễn Minh Quân", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "23", "note": "", "action": "No action"}, {"id": "RC0018", "student": "100219-Lê Trần Hải Phú", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "24", "note": "", "action": "No action"}, {"id": "RC0019", "student": "100220-Đỗ Trung Dũng ", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 1000000.0, "source": "25", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0020", "student": "100198-Võ Trịnh Uyên Phương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "26", "note": "", "action": "No action"}, {"id": "RC0021", "student": "100197-Nguyễn Thanh Trúc", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "27", "note": "", "action": "No action"}, {"id": "RC0022", "student": "100207-Lưu Gia Phát", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "28", "note": "", "action": "No action"}, {"id": "RC0023", "student": "100221-Trần Quốc Anh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "29", "note": "", "action": "No action"}, {"id": "RC0024", "student": "100190-Bùi Thị Hồng Phương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "30", "note": "", "action": "No action"}, {"id": "RC0025", "student": "100148-Nguyễn Thị Như Ý", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "31", "note": "", "action": "No action"}, {"id": "RC0026", "student": "100146-Trần Hạ Ngọc Trâm", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "32", "note": "", "action": "No action"}, {"id": "RC0027", "student": "100143-Cao Ngọc Hồng Sương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "33", "note": "", "action": "No action"}, {"id": "RC0028", "student": "100222-Nguyễn Dương Tường Vy", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "34", "note": "", "action": "No action"}, {"id": "RC0029", "student": "100192-Tạ Phương Nghi", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "35", "note": "", "action": "No action"}, {"id": "RC0030", "student": "100211-Vương Ngọc Lan Anh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "36", "note": "", "action": "No action"}, {"id": "RC0031", "student": "100216-Nguyễn Đỗ Hồng Minh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "37", "note": "", "action": "No action"}, {"id": "RC0032", "student": "100210-Phạm Hào Cường", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "38", "note": "", "action": "No action"}, {"id": "RC0033", "student": "100224-Nguyễn Ngọc Quỳnh Như", "severity": "HIGH", "alert": "HIGH: Cash > contract value", "exposure": 10000.0, "source": "39, 47, 55", "note": "", "action": "Check duplicate payment, overpayment or contract value"}, {"id": "RC0034", "student": "100223-Hồ Thị Hồng Vân", "severity": "HIGH", "alert": "HIGH: Cash > contract value", "exposure": 10000.0, "source": "40, 45, 52", "note": "", "action": "Check duplicate payment, overpayment or contract value"}, {"id": "RC0035", "student": "100225-Phan Mai Phương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "41", "note": "", "action": "No action"}, {"id": "RC0036", "student": "100143-Cao Ngọc Hồng Sương", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "42", "note": "", "action": "No action"}, {"id": "RC0037", "student": "100229-Lê Thị Trúc Mai", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "43, 53, 68", "note": "", "action": "No action"}, {"id": "RC0038", "student": "100230-Nguyễn Lê Thu Nhàn", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "44, 59, 69", "note": "", "action": "No action"}, {"id": "RC0039", "student": "100231-Trương Đình Sáng", "severity": "CRITICAL", "alert": "CRITICAL: Missing allocation basis", "exposure": 7000000.0, "source": "46", "note": "Invalid duration value (looks like date serial)", "action": "Complete service period/session plan and resolve allocation gap"}, {"id": "RC0040", "student": "100227-Trần Thị Huệ", "severity": "CRITICAL", "alert": "CRITICAL: Missing allocation basis", "exposure": 8000000.0, "source": "48, 57", "note": "Invalid duration value (looks like date serial)", "action": "Complete service period/session plan and resolve allocation gap"}, {"id": "RC0041", "student": "100226-Hứa Trần Vân Anh", "severity": "CRITICAL", "alert": "CRITICAL: Missing allocation basis", "exposure": 8000000.0, "source": "49, 56", "note": "Invalid duration value (looks like date serial)", "action": "Complete service period/session plan and resolve allocation gap"}, {"id": "RC0042", "student": "100228-Nguyễn Hoàng Thúy Quyên", "severity": "CRITICAL", "alert": "CRITICAL: Missing allocation basis", "exposure": 8000000.0, "source": "50, 58", "note": "Invalid duration value (looks like date serial)", "action": "Complete service period/session plan and resolve allocation gap"}, {"id": "RC0043", "student": "100232-Lê Thị Tuyết Mai", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "51", "note": "", "action": "No action"}, {"id": "RC0044", "student": "100233-Trần Võ Quốc Tiến", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 2000000.0, "source": "54", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0045", "student": "100235-Trương Phương Anh", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 0.0, "source": "60", "note": "Payment date repaired from start date | Invalid source year", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0046", "student": "100236-Trương Ngọc Thúy Vy", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 0.0, "source": "61", "note": "Payment date repaired from start date | Invalid source year", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0047", "student": "100223-Hồ Thị Hồng Vân", "severity": "MEDIUM", "alert": "MEDIUM: Cash remaining / discount review", "exposure": 5490000.0, "source": "62", "note": "", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0048", "student": "100234-Trương Nguyễn Hoàng Minh Tú", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 2000000.0, "source": "63", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0049", "student": "100237-Phùng Tô Tiến Mạnh", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "64", "note": "", "action": "No action"}, {"id": "RC0050", "student": "100215-Phạm Bảo Ngọc", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "65", "note": "", "action": "No action"}, {"id": "RC0051", "student": "100238-Nguyễn Vũ Quỳnh Giao", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "66", "note": "", "action": "No action"}, {"id": "RC0052", "student": "100239-Huỳnh Đình Minh Thành", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "67", "note": "", "action": "No action"}, {"id": "RC0053", "student": "100111-Nguyễn Minh Nhật", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "70", "note": "", "action": "No action"}, {"id": "RC0054", "student": "100240-Huỳnh Gia Nghi ", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "71", "note": "", "action": "No action"}, {"id": "RC0055", "student": "100225-Phan Mai Phương", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 490000.0, "source": "72", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0056", "student": "100222-Nguyễn Dương Tường Vy", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "73", "note": "", "action": "No action"}, {"id": "RC0057", "student": "100241-Nguyễn Thành Đức", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "74", "note": "", "action": "No action"}, {"id": "RC0058", "student": "100243-Cao Thanh Mỹ Ngọc", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "75", "note": "", "action": "No action"}, {"id": "RC0059", "student": "100244-Đặng Thanh Ngân", "severity": "OK", "alert": "OK", "exposure": 0.0, "source": "76", "note": "", "action": "No action"}, {"id": "RC0060", "student": "100245-Huỳnh Thiên Bảo", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 490000.0, "source": "77", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0061", "student": "100246-Lê Nguyễn Bảo Minh", "severity": "MEDIUM", "alert": "MEDIUM: Source data issue", "exposure": 5240000.0, "source": "78", "note": "Paid amount below tuition: possible discount or receivable", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0062", "student": "200100-Smartlog - cty", "severity": "MEDIUM", "alert": "MEDIUM: Cash remaining / discount review", "exposure": 34500000.0, "source": "79, 81", "note": "", "action": "Confirm discount / receivable / source issue"}, {"id": "RC0063", "student": "100247-Đỗ Bảo Long", "severity": "HIGH", "alert": "HIGH: Cash > contract value", "exposure": 10000.0, "source": "80", "note": "Cash paid exceeds listed tuition", "action": "Check duplicate payment, overpayment or contract value"}], "health": {"OK": 44, "MEDIUM": 11, "HIGH": 3, "CRITICAL": 5}, "kpi": {"allocatedCurrent": 109947630.80364555, "recognizedCurrent": 61774785.95831161, "deferred": 260904359.3603754, "cashCurrent": 48250000.0, "futureAllocated": 207111514.5150415, "unallocated": 60000000.0, "cumCash": 1007740000.0, "cumRecognized": 746835640.6396246}, "expense": {"julyActualTotal": 53359633.0, "julyPaidTotal": 53359633.0, "fixedBaseline": 24645333.0, "variableJuly": 28714300.0, "teacherJuly": 27014300.0, "fixedByCategory": {"Lương nhân sự vận hành": 7725000.0, "Thuê mặt bằng": 10000000.0, "Nền tảng / Phần mềm": 2350000.0, "Vệ sinh / Tạp vụ": 900000.0, "Dịch vụ thuê ngoài": 3170333.0, "Thuế / Phí": 500000.0}}, "profit": {"splitStart": "2026-08", "founderPct": 0.8, "cofounderPct": 0.2}};
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:0}).format(Number(n)||0);
+const compact=n=>{n=Number(n)||0;return n>=1e9?(n/1e9).toFixed(2)+'B':(n/1e6).toFixed(1)+'M'};
+const pct=n=>n==null||!isFinite(n)?'—':(n*100).toFixed(1)+'%';
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const mByKey=Object.fromEntries(D.monthly.map(x=>[x.month,x]));
+const activeMonths=D.monthly.filter(x=>x.cash||x.allocated||x.recognized||x.remaining);
+const current=D.monthly.find(x=>x.period==='Current');
+
+$('asof').textContent=D.asOf;
+$('kAlloc').textContent=compact(D.kpi.allocatedCurrent);
+$('kRec').textContent=compact(D.kpi.recognizedCurrent);
+$('kDeferred').textContent=compact(D.kpi.deferred);
+$('kCash').textContent=compact(D.kpi.cashCurrent);
+$('kFuture').textContent=compact(D.kpi.futureAllocated);
+$('kUnalloc').textContent=compact(D.kpi.unallocated);
+
+// tabs
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); $('page-'+b.dataset.page).classList.add('active');
+  if(b.dataset.page==='ledger') renderLedger();
+});
+
+// chart
+let chartMode='2026';
+function chartRows(){
+  if(chartMode==='2026')return D.monthly.filter(x=>x.month.startsWith('2026-'));
+  if(chartMode==='future')return D.monthly.filter(x=>x.period!=='Past'&&(x.allocated||x.cash||x.recognized));
+  return activeMonths;
+}
+function showTip(ev,x){
+  const tip=$('tooltip');
+  tip.innerHTML=`<b>${esc(x.label)}</b><br>Allocated Revenue: <b>${money(x.allocated)}</b><br>Recognized Revenue: <b>${money(x.recognized)}</b><br>Cash In: <b>${money(x.cash)}</b><br>Deferred balance: <b>${money(x.deferred)}</b>`;
+  tip.classList.add('show');
+  const px=ev.clientX||ev.pageX||innerWidth/2, py=ev.clientY||ev.pageY||100;
+  const left=Math.min(px+14,innerWidth-215), top=Math.min(py+14,innerHeight-145);
+  tip.style.left=left+'px';tip.style.top=top+'px';
+}
+function hideTip(){setTimeout(()=>$('tooltip').classList.remove('show'),160)}
+function renderChart(selectedMonth='2026-08'){
+  const rows=chartRows(), max=Math.max(1,...rows.flatMap(x=>[x.allocated,x.recognized,x.cash]));
+  $('gridlines').innerHTML=[1,.75,.5,.25,0].map(v=>`<div class="gridline"><span>${compact(max*v)}</span></div>`).join('');
+  $('barArea').innerHTML=rows.map(x=>`
+    <div class="month-group ${x.month===selectedMonth?'selected':''}" data-month="${x.month}">
+      <div class="bar alloc" style="height:${x.allocated/max*100}%" aria-label="${x.label} allocated ${x.allocated}"></div>
+      <div class="bar rec" style="height:${x.recognized/max*100}%"></div>
+      <div class="bar cash" style="height:${x.cash/max*100}%"></div>
+      <div class="xlab">${x.label.replace(' 2026','').replace(' 2025','').replace(' 2027','')}</div>
+    </div>`).join('');
+  document.querySelectorAll('.month-group').forEach(g=>{
+    const x=mByKey[g.dataset.month];
+    g.addEventListener('pointerenter',e=>showTip(e,x));
+    g.addEventListener('pointermove',e=>showTip(e,x));
+    g.addEventListener('pointerleave',hideTip);
+    g.addEventListener('pointerdown',e=>{showTip(e,x);setPrimaryMonth(x.month)});
+    g.addEventListener('click',e=>{showTip(e,x);setPrimaryMonth(x.month)});
+  });
+}
+document.querySelectorAll('[data-chart]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-chart]').forEach(x=>x.classList.remove('active'));b.classList.add('active');chartMode=b.dataset.chart;renderChart($('primaryMonth').value||'2026-08')
+});
+
+// overview table
+function renderOverview(){
+  const f=$('overviewPeriod').value;
+  let rows=D.monthly;
+  if(f==='active')rows=activeMonths;else if(f!=='all')rows=rows.filter(x=>x.period===f);
+  $('overviewBody').innerHTML=rows.map(x=>`<tr class="${x.period==='Current'?'current-row':x.period==='Future'?'future-row':''}">
+    <td><b>${x.label}</b></td><td class="num"><b>${money(x.allocated)}</b></td><td class="num">${money(x.recognized)}</td><td class="num">${money(x.remaining)}</td><td class="num">${money(x.cash)}</td><td class="num">${money(x.deferred)}</td><td class="num ${x.mom<-0.4?'neg':x.mom>0?'pos':''}">${pct(x.mom)}</td><td><span class="tag ${x.period}">${x.period}</span></td><td class="${x.alert?'neg':''}">${x.alert||'—'}</td></tr>`).join('');
+}
+$('overviewPeriod').onchange=renderOverview;
+
+// month compare
+const options=activeMonths.map(x=>`<option value="${x.month}">${x.label}</option>`).join('');
+$('primaryMonth').innerHTML=options;$('compareMonth').innerHTML=options;
+$('primaryMonth').value='2026-08';$('compareMonth').value='2026-07';
+function delta(a,b){if(!b)return null;return (a-b)/Math.abs(b)}
+function dclass(v){return v==null?'':v>0?'pos':'neg'}
+function setPrimaryMonth(m){if(mByKey[m]){$('primaryMonth').value=m;renderCompare();renderChart(m)}}
+function miniMonthHero(x, secondary=false){
+  const recPct=x.allocated?x.recognized/x.allocated:0;
+  return `<div class="eyebrow">${secondary?'Comparison':'Primary'}</div><h3>${x.label}</h3><div class="hero-value">${compact(x.allocated)}</div><div class="small muted">Allocated Revenue</div>
+    <div class="hero-subgrid">
+      <div class="hero-sub"><span>Recognized</span><b>${compact(x.recognized)}</b></div>
+      <div class="hero-sub"><span>Cash In</span><b>${compact(x.cash)}</b></div>
+      <div class="hero-sub"><span>Recognition</span><b>${pct(recPct)}</b></div>
+      <div class="hero-sub"><span>Deferred</span><b>${compact(x.deferred)}</b></div>
+    </div>`;
+}
+function renderCompareSpark(a,b){
+  const indices=[D.monthly.findIndex(x=>x.month===a.month),D.monthly.findIndex(x=>x.month===b.month)].filter(i=>i>=0);
+  const lo=Math.max(0,Math.min(...indices)-2), hi=Math.min(D.monthly.length-1,Math.max(...indices)+2);
+  const rows=D.monthly.slice(lo,hi+1).filter(x=>x.allocated||x.cash||x.recognized);
+  const w=600,h=92,p=10,max=Math.max(1,...rows.map(x=>x.allocated)),min=Math.min(...rows.map(x=>x.allocated));
+  const den=Math.max(1,max-min), step=rows.length>1?(w-p*2)/(rows.length-1):0;
+  const pts=rows.map((x,i)=>({x:p+i*step,y:h-p-((x.allocated-min)/den)*(h-p*2),row:x}));
+  const poly=pts.map(q=>`${q.x},${q.y}`).join(' ');
+  $('compareSpark').innerHTML=`<line x1="0" y1="${h-p}" x2="${w}" y2="${h-p}" stroke="#e8eaf1" stroke-width="1"/>
+    <polyline points="${poly}" fill="none" stroke="#6847f5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    ${pts.map(q=>`<circle cx="${q.x}" cy="${q.y}" r="${q.row.month===a.month||q.row.month===b.month?5:3}" fill="${q.row.month===a.month?'#159b6b':q.row.month===b.month?'#d9901f':'#6847f5'}"/>`).join('')}
+    ${pts.map(q=>`<text x="${q.x}" y="${h-1}" text-anchor="middle" font-size="8" fill="#838b9e">${q.row.label.split(' ')[0]}</text>`).join('')}`;
+  $('sparkCaption').textContent=`${rows[0]?.label||''} → ${rows[rows.length-1]?.label||''}`;
+}
+function renderCompare(){
+  const a=mByKey[$('primaryMonth').value], b=mByKey[$('compareMonth').value];
+  const metrics=[
+    ['Allocated Revenue',a.allocated,b.allocated,delta(a.allocated,b.allocated)],
+    ['Recognized Revenue',a.recognized,b.recognized,delta(a.recognized,b.recognized)],
+    ['Cash In',a.cash,b.cash,delta(a.cash,b.cash)],
+    ['Deferred Balance',a.deferred,b.deferred,delta(a.deferred,b.deferred)],
+    ['Cash - Recognized',a.gap,b.gap,null]
+  ];
+  $('primaryHero').innerHTML=miniMonthHero(a,false);$('compareHero').innerHTML=miniMonthHero(b,true);
+  const ad=delta(a.allocated,b.allocated), orb=$('deltaOrb');
+  const abs=Math.min(Math.abs(ad||0),1), deg=Math.max(30,Math.round(abs*360));
+  orb.style.setProperty('--orbdeg',deg+'deg');orb.classList.remove('positive','negative');orb.classList.add((ad||0)>=0?'positive':'negative');
+  $('deltaArrow').textContent=(ad||0)>=0?'↑':'↓';$('deltaPct').textContent=ad==null?'—':Math.abs(ad*100).toFixed(1)+'%';
+  const pulseData=metrics.slice(0,4);
+  $('comparePulses').innerHTML=pulseData.map(m=>{
+    const d=m[3],cl=d==null?'':d>=0?'up':'down',width=d==null?0:Math.min(100,Math.abs(d)*100);
+    return `<div class="pulse-card ${cl}"><div class="p-label">${m[0]}</div><div class="p-delta ${dclass(d)}">${d==null?'—':((d>=0?'▲ ':'▼ ')+Math.abs(d*100).toFixed(1)+'%')}</div><div class="p-track"><div class="p-fill" style="width:${width}%"></div></div></div>`;
+  }).join('');
+  renderCompareSpark(a,b);
+  $('compareMetrics').innerHTML=`<div class="metric-row header"><span>Metric</span><span>${a.label}</span><span>${b.label}</span><span>Δ</span></div>`+metrics.map(m=>`<div class="metric-row"><span>${m[0]}</span><b>${money(m[1])}</b><span>${money(m[2])}</span><span class="delta ${dclass(m[3])}">${m[3]==null?'—':pct(m[3])}</span></div>`).join('');
+  let bullets=[];
+  if(a.period==='Current') bullets.push(`Recognition progress: <strong>${pct(a.allocated?a.recognized/a.allocated:0)}</strong> của full-month allocated revenue đã được ghi nhận tới ${D.asOf}. Vì đây là MTD, không nên so Recognized trực tiếp với một tháng đã đóng kỳ.`);
+  if(a.period==='Future') bullets.push(`Đây là tháng tương lai: Allocated Revenue là revenue đã được xếp lịch; Recognized Revenue vẫn bằng 0 cho tới khi dịch vụ được cung cấp.`);
+  if(a.period==='Past') bullets.push(`Tháng đã đóng kỳ: Recognized Revenue hiện bằng <strong>${pct(a.allocated?a.recognized/a.allocated:0)}</strong> Allocated Revenue.`);
+  const allocDelta=delta(a.allocated,b.allocated);
+  if(allocDelta!=null) bullets.push(`Allocated Revenue ${allocDelta>=0?'tăng':'giảm'} <strong>${Math.abs(allocDelta*100).toFixed(1)}%</strong> so với ${b.label}.`);
+  const cashDelta=delta(a.cash,b.cash);
+  if(cashDelta!=null && (a.cash||b.cash)) bullets.push(`Cash In ${cashDelta>=0?'tăng':'giảm'} <strong>${Math.abs(cashDelta*100).toFixed(1)}%</strong> so với ${b.label}; cash movement không đồng nghĩa revenue movement.`);
+  if(a.gap<0) bullets.push(`Cash In thấp hơn Recognized Revenue <strong>${money(Math.abs(a.gap))}</strong> trong tháng; cần đối chiếu timing thu tiền/công nợ thay vì kết luận revenue yếu.`);
+  if(a.mom<-0.4) bullets.push(`<strong>Cảnh báo run-rate:</strong> allocated revenue MoM giảm ${Math.abs(a.mom*100).toFixed(1)}%.`);
+  if(a.deferred>b.deferred*1.15 && b.deferred>0) bullets.push(`Deferred Revenue tăng đáng kể; đây có thể phản ánh cash thu trước tốt nhưng nghĩa vụ cung cấp dịch vụ tương lai cũng tăng.`);
+  $('analysisBox').innerHTML=`<strong>${a.label} vs ${b.label}</strong><ul>${bullets.map(x=>`<li>${x}</li>`).join('')}</ul>`;
+}
+$('primaryMonth').onchange=()=>{renderCompare();renderChart($('primaryMonth').value)};
+$('compareMonth').onchange=renderCompare;
+
+$('allMonthBody').innerHTML=activeMonths.map(x=>`<tr data-select-month="${x.month}" class="${x.period==='Current'?'current-row':x.period==='Future'?'future-row':''}" style="cursor:pointer">
+<td><b>${x.label}</b></td><td class="num">${money(x.allocated)}</td><td class="num">${money(x.recognized)}</td><td class="num">${pct(x.allocated?x.recognized/x.allocated:0)}</td><td class="num">${money(x.cash)}</td><td class="num ${x.gap<0?'neg':x.gap>0?'pos':''}">${money(x.gap)}</td><td class="num">${money(x.deferred)}</td><td class="num ${x.mom<-0.4?'neg':''}">${pct(x.mom)}</td><td><span class="tag ${x.period}">${x.period}</span></td></tr>`).join('');
+document.querySelectorAll('[data-select-month]').forEach(r=>r.onclick=()=>setPrimaryMonth(r.dataset.selectMonth));
+
+// Profit
+const splitMonths=D.monthly.filter(x=>x.month>=D.profit.splitStart && (x.allocated||x.period==='Current')).map(x=>`<option value="${x.month}">${x.label}</option>`).join('');
+$('profitMonth').innerHTML=splitMonths;$('profitMonth').value='2026-08';
+$('fixedTotal').textContent=money(D.expense.fixedBaseline);
+$('varJuly').textContent=money(D.expense.variableJuly);
+$('teacherJuly').textContent=money(D.expense.teacherJuly);
+$('julyTotal').textContent=money(D.expense.julyActualTotal);
+$('fixedBaselineInput').value=money(D.expense.fixedBaseline);
+$('fixedCostList').innerHTML=Object.entries(D.expense.fixedByCategory).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="cost-line"><span><span class="badge fixed">Fixed</span> ${esc(k)}</span><b>${money(v)}</b></div>`).join('');
+
+function parseMoneyInput(v){return Number(String(v||'').replace(/[^\d.-]/g,''))||0}
+function loadProfitScenario(){
+  try{return JSON.parse(localStorage.getItem('zfeProfitScenario')||'{}')}catch(e){return{}}
+}
+function saveProfitScenario(s){try{localStorage.setItem('zfeProfitScenario',JSON.stringify(s))}catch(e){}}
+function renderProfit(){
+  const m=$('profitMonth').value,x=mByKey[m],store=loadProfitScenario(),s=store[m]||{};
+  if(document.activeElement!==$('variableForecast')) $('variableForecast').value=s.variable||'';
+  if(document.activeElement!==$('otherForecast')) $('otherForecast').value=s.other||'';
+  if(document.activeElement!==$('actualExpenseInput')) $('actualExpenseInput').value=s.actual||'';
+  const variable=parseMoneyInput($('variableForecast').value), other=parseMoneyInput($('otherForecast').value), actual=parseMoneyInput($('actualExpenseInput').value);
+  const profit=x.allocated-D.expense.fixedBaseline-variable-other;
+  const margin=x.allocated?profit/x.allocated:0;
+  $('pAllocated').textContent=money(x.allocated);$('pProfit').textContent=money(profit);$('pProfit').className='v '+(profit<0?'neg':'pos');$('pMargin').textContent=pct(margin);
+  $('founderShare').textContent=money(profit*D.profit.founderPct);$('cofounderShare').textContent=money(profit*D.profit.cofounderPct);
+  $('recognizedProfit').textContent=actual>0?money(x.recognized-actual):'N/A';
+  $('recognizedProfit').className='v '+(actual>0?(x.recognized-actual<0?'neg':'pos'):'');
+  $('profitWarning').innerHTML=`* Forecast Profit của <b>${x.label}</b> đang dùng Allocated Revenue ${money(x.allocated)} – fixed-cost baseline ${money(D.expense.fixedBaseline)} – variable/other forecast do bạn nhập. <b>Không carry forward ${money(D.expense.variableJuly)} biến phí T7</b> (trong đó lương GV ${money(D.expense.teacherJuly)}). Khi có chi phí actual, nhập “Actual expenses to date” để xem Recognized Profit to Date.`;
+  store[m]={variable:$('variableForecast').value,other:$('otherForecast').value,actual:$('actualExpenseInput').value};saveProfitScenario(store);
+}
+$('profitMonth').onchange=()=>{renderProfit();renderFounderAccumulation();};['variableForecast','otherForecast','actualExpenseInput'].forEach(id=>$(id).addEventListener('input',()=>{renderProfit();renderFounderAccumulation();}));
+
+
+// Founder accumulation + cost coverage
+const ytd2026=D.monthly.filter(x=>x.month>='2026-01'&&x.month<='2026-08');
+function loadMonthlyCosts(){try{return JSON.parse(localStorage.getItem('zfeMonthlyCosts')||'{}')}catch(e){return{}}}
+function saveMonthlyCosts(v){try{localStorage.setItem('zfeMonthlyCosts',JSON.stringify(v))}catch(e){}}
+function monthExpenseBasis(m){
+  const costs=loadMonthlyCosts(), scenario=loadProfitScenario();
+  if(m==='2026-07') return {expense:D.expense.julyActualTotal,basis:'Actual Jul cost',type:'actual'};
+  if(m==='2026-08'){
+    const s=scenario[m]||{};
+    const actual=parseMoneyInput(s.actual);
+    if(actual>0) return {expense:actual,basis:'Actual to date',type:'actual'};
+    const vf=parseMoneyInput(s.variable), of=parseMoneyInput(s.other);
+    return {expense:D.expense.fixedBaseline+vf+of,basis:'Provisional forecast',type:'forecast'};
+  }
+  const raw=costs[m];
+  if(raw!==undefined&&raw!==null&&String(raw).trim()!==''){
+    return {expense:parseMoneyInput(raw),basis:'Manual actual',type:'actual'};
+  }
+  return {expense:null,basis:'Missing cost',type:'missing'};
+}
+function accumulationRows(){
+  let cumA=0,cumB=0;
+  return ytd2026.map(x=>{
+    const eb=monthExpenseBasis(x.month);
+    const profit=eb.expense==null?null:x.recognized-eb.expense;
+    const splitB=x.month>=D.profit.splitStart?D.profit.cofounderPct:0;
+    const splitA=1-splitB;
+    const a=profit==null?null:profit*splitA,b=profit==null?null:profit*splitB;
+    if(a!=null)cumA+=a;if(b!=null)cumB+=b;
+    return {...x,expense:eb.expense,basis:eb.basis,basisType:eb.type,profit,splitA,splitB,a,b,cumA,cumB};
+  });
+}
+function renderAccumChart(rows){
+  const max=Math.max(1,...rows.flatMap(r=>[r.cumA,r.cumB].filter(v=>isFinite(v))));
+  $('accumChart').innerHTML=rows.map((r,i)=>`<div class="acc-month ${r.basisType==='missing'?'missing':''}" title="${r.label}">
+    <div class="acc-bar a" style="height:${Math.max(r.basisType==='missing'?2:r.cumA/max*100,2)}%"></div>
+    <div class="acc-bar b" style="height:${Math.max(r.basisType==='missing'?2:r.cumB/max*100,2)}%"></div>
+    <div class="acc-lab">${r.label.split(' ')[0]}</div>
+    ${r.month==='2026-08'?'<div class="acc-start" style="left:0"></div><div class="acc-start-label" style="left:0">B starts</div>':''}
+  </div>`).join('');
+}
+function renderFounderAccumulation(){
+  const rows=accumulationRows(), covered=rows.filter(r=>r.expense!=null).length, last=rows[rows.length-1];
+  const knownProfit=rows.reduce((s,r)=>s+(r.profit??0),0);
+  $('accFounderA').textContent=money(last.cumA);$('accFounderB').textContent=money(last.cumB);$('accProfit').textContent=money(knownProfit);$('accCoverage').textContent=`${covered}/${rows.length}`;
+  $('coverageBar').style.width=(covered/rows.length*100)+'%';
+  renderAccumChart(rows);
+  $('accumBody').innerHTML=rows.map(r=>`<tr>
+    <td><b>${r.label}</b></td>
+    <td class="num">${money(r.recognized)}</td>
+    <td><span class="basis ${r.basisType}">${r.basis}</span></td>
+    <td class="num">${r.month<'2026-07'?`<input class="input-cost" data-cost-month="${r.month}" inputmode="numeric" placeholder="Enter cost" value="${esc((loadMonthlyCosts()[r.month]??''))}">`:money(r.expense)}</td>
+    <td class="num ${r.profit==null?'muted':r.profit<0?'neg':'pos'}">${r.profit==null?'N/A':money(r.profit)}</td>
+    <td class="num">${r.profit==null||!r.recognized?'—':pct(r.profit/r.recognized)}</td>
+    <td class="num">${pct(r.splitA)}</td><td class="num">${pct(r.splitB)}</td>
+    <td class="num">${r.a==null?'—':money(r.a)}</td><td class="num">${r.b==null?'—':money(r.b)}</td>
+    <td class="num"><b>${money(r.cumA)}</b></td><td class="num"><b>${money(r.cumB)}</b></td>
+  </tr>`).join('');
+  document.querySelectorAll('[data-cost-month]').forEach(inp=>inp.addEventListener('input',e=>{
+    const s=loadMonthlyCosts();s[e.target.dataset.costMonth]=e.target.value;saveMonthlyCosts(s);renderFounderAccumulation();
+  }));
+  const jan=rows[0], jul=rows.find(r=>r.month==='2026-07'), aug=rows.find(r=>r.month==='2026-08');
+  const allocGrowth=jan.allocated?aug.allocated/jan.allocated-1:null;
+  const julMargin=jul?.profit!=null&&jul.recognized?jul.profit/jul.recognized:null;
+  const augMargin=aug?.profit!=null&&aug.recognized?aug.profit/aug.recognized:null;
+  const fixedShare=D.expense.fixedBaseline/D.expense.julyActualTotal, varShare=D.expense.variableJuly/D.expense.julyActualTotal, teacherShare=D.expense.teacherJuly/D.expense.julyActualTotal;
+  $('fixedCostBar').style.width=(fixedShare*100)+'%';$('variableCostBar').style.width=(varShare*100)+'%';$('teacherShareLegend').textContent=`Teacher payroll = ${(teacherShare*100).toFixed(1)}% of Jul total`;
+  const latestKnown=rows.filter(r=>r.profit!=null), prevKnown=latestKnown.length>1?latestKnown[latestKnown.length-2]:null;
+  const profitGrowth=prevKnown&&aug.profit!=null&&prevKnown.profit!==0?(aug.profit-prevKnown.profit)/Math.abs(prevKnown.profit):null;
+  $('growthAnalysis').innerHTML=`
+    <div class="growth-item"><div class="g-top"><b>Allocated Revenue: Jan → Aug</b><span class="g-val ${allocGrowth>=0?'pos':'neg'}">${allocGrowth==null?'—':((allocGrowth>=0?'▲ ':'▼ ')+Math.abs(allocGrowth*100).toFixed(1)+'%')}</span></div><p>Jan ${compact(jan.allocated)} → Aug ${compact(aug.allocated)} full-month allocation. Đây là growth của revenue run-rate, không phải cash growth.</p></div>
+    <div class="growth-item"><div class="g-top"><b>YTD Recognized Revenue</b><span class="g-val">${compact(rows.reduce((s,r)=>s+r.recognized,0))}</span></div><p>Jan → ${D.asOf}. Aug mới là MTD nên không nên dùng recognized Aug để so full-month với Jul.</p></div>
+    <div class="growth-item"><div class="g-top"><b>July actual profit margin</b><span class="g-val ${julMargin>=0?'pos':'neg'}">${julMargin==null?'—':pct(julMargin)}</span></div><p>Jul Recognized Revenue ${compact(jul.recognized)} – actual cost ${compact(D.expense.julyActualTotal)}.</p></div>
+    <div class="growth-item"><div class="g-top"><b>Aug provisional profit</b><span class="g-val ${aug.profit>=0?'pos':'neg'}">${money(aug.profit)}</span></div><p>Hiện dùng fixed baseline + variable/other forecast bạn nhập. Không được đọc ${profitGrowth==null?'như growth profit':'chênh lệch '+pct(profitGrowth)+' như growth thật'} cho tới khi cost Aug actual đầy đủ.</p></div>
+    <div class="growth-item"><div class="g-top"><b>Cost coverage</b><span class="g-val">${covered}/${rows.length} months</span></div><p>Founder accumulation chỉ đáng tin theo đúng mức coverage này. Jan–Jun sẽ tự bổ sung vào cumulative ngay khi nhập actual expenses.</p></div>
+    <div class="growth-item"><div class="g-top"><b>Founder B contribution start</b><span class="g-val">${money(aug.b??0)}</span></div><p>Founder B bắt đầu 20% từ Aug-2026; trước đó contribution = 0. Founder A giữ 100% của các tháng pre-split có profit basis.</p></div>`;
+}
+$('resetCostInputs').onclick=()=>{localStorage.removeItem('zfeMonthlyCosts');renderFounderAccumulation();};
+
+// Ledger
+const ledgerMonths=[...new Set(D.ledger.map(x=>x.month).filter(Boolean))].sort();
+$('ledgerMonth').innerHTML=`<option value="all">All months</option>`+ledgerMonths.map(m=>`<option value="${m}">${m}</option>`).join('');
+$('ledgerMonth').value='2026-07';
+function filteredLedger(){
+  const m=$('ledgerMonth').value,d=$('ledgerDir').value,q=$('ledgerSearch').value.trim().toLowerCase();
+  return D.ledger.filter(x=>(m==='all'||x.month===m)&&(d==='all'||x.direction===d)&&(!q||[x.ref,x.party,x.category,x.detail,x.note].join(' ').toLowerCase().includes(q)));
+}
+function renderLedger(){
+  const rows=filteredLedger(),tin=rows.filter(x=>x.direction==='IN').reduce((s,x)=>s+x.amount,0),tout=rows.filter(x=>x.direction==='OUT').reduce((s,x)=>s+x.amount,0);
+  $('ledgerIn').textContent=money(tin);$('ledgerOut').textContent=money(tout);$('ledgerNet').textContent=money(tin-tout);$('ledgerNet').className='v '+(tin-tout<0?'neg':'pos');
+  if($('ledgerView').value==='daily'){
+    const g={};rows.forEach(x=>{g[x.date]??={in:0,out:0,count:0};g[x.date][x.direction==='IN'?'in':'out']+=x.amount;g[x.date].count++});
+    const days=Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0]));
+    $('ledgerHead').innerHTML='<tr><th>Date</th><th class="num">Cash In</th><th class="num">Cash Out</th><th class="num">Net</th><th class="num">Transactions</th></tr>';
+    $('ledgerBody').innerHTML=days.map(([d,v])=>`<tr class="daily-row"><td>${d}</td><td class="num pos">${money(v.in)}</td><td class="num neg">${money(v.out)}</td><td class="num ${v.in-v.out<0?'neg':'pos'}">${money(v.in-v.out)}</td><td class="num">${v.count}</td></tr>`).join('');
+  }else{
+    $('ledgerHead').innerHTML='<tr><th>Date</th><th>IN/OUT</th><th>Ref</th><th>Student / Vendor</th><th>Category</th><th>Detail</th><th class="num">Amount</th><th>Status / Note</th></tr>';
+    $('ledgerBody').innerHTML=rows.map(x=>`<tr><td>${x.date}</td><td class="dir ${x.direction}">${x.direction==='IN'?'↑ IN':'↓ OUT'}</td><td>${esc(x.ref)}</td><td><b>${esc(x.party)}</b></td><td>${esc(x.category)}${x.costType?`<br><span class="badge ${x.costType==='Cố định'?'fixed':'variable'}">${esc(x.costType)}</span>`:''}</td><td>${esc(x.detail)}</td><td class="num ${x.direction==='IN'?'pos':'neg'}"><b>${money(x.amount)}</b></td><td>${esc(x.status||'')}${x.note?`<br><span class="muted">${esc(x.note)}</span>`:''}</td></tr>`).join('');
+  }
+}
+['ledgerMonth','ledgerDir','ledgerView'].forEach(id=>$(id).onchange=renderLedger);$('ledgerSearch').oninput=renderLedger;
+$('downloadLedger').onclick=()=>{
+  const rows=filteredLedger();const head=['Date','Direction','Ref','Party','Category','Cost Type','Detail','Amount','Status','Note'];
+  const csv=[head,...rows.map(x=>[x.date,x.direction,x.ref,x.party,x.category,x.costType||'',x.detail,x.amount,x.status||'',x.note||''])].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ZFE_filtered_cash_ledger.csv';a.click();URL.revokeObjectURL(a.href);
+};
+
+// Alerts
+$('healthGrid').innerHTML=['OK','MEDIUM','HIGH','CRITICAL'].map(k=>`<div class="health-box ${k}"><span class="small muted">${k}</span><b>${D.health[k]||0}</b></div>`).join('');
+function renderAlerts(){
+  const f=$('alertFilter').value;const rows=D.alerts.filter(a=>a.severity!=='OK'&&(f==='all'||a.severity===f));
+  $('alertRows').innerHTML=rows.map(a=>`<div class="alert-row"><span class="sev ${a.severity}">${a.severity}</span><div><b>${esc(a.id)} · ${esc(a.student)}</b><br><span class="muted">${esc(a.alert)}</span></div><div style="text-align:right"><b>${a.exposure?money(a.exposure):'—'}</b></div><div class="muted">${esc(a.note)}<br><b style="color:#161b2b">${esc(a.action)}</b></div></div>`).join('');
+}
+$('alertFilter').onchange=renderAlerts;
+
+// init
+renderOverview();renderCompare();renderChart('2026-08');renderProfit();renderFounderAccumulation();renderLedger();renderAlerts();
+</script>
+</body>
+</html>
