@@ -8,7 +8,9 @@ import { formatDate, formatMoney, sessionDisplayLabel } from "@/lib/format";
 import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/vietnam-date";
 import type { CSSProperties, ReactNode } from "react";
 import { canAccessStaffOps } from "@/lib/staff-ops";
-import { buildFinanceDashboardData } from "@/lib/finance-dashboard-data";
+import { buildFinanceDashboardData, extractBaselineFinanceData } from "@/lib/finance-dashboard-data";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 function weekRange() {
   const now = vietnamTodayDate();
@@ -93,7 +95,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       adminTeacherRates = teacherRates.data || [];
       adminPayrollStatements = payrollStatements.data || [];
       importedMonthlyBalance = monthlyBalance.data || null;
-      const financeIntelligence=await buildFinanceDashboardData(supabase);
+      const financeTemplate=await fs.readFile(path.join(process.cwd(),"content","finance-dashboard-v4-live-template.html"),"utf8");
+      const financeBaseline=extractBaselineFinanceData(financeTemplate);
+      const financeIntelligence=await buildFinanceDashboardData(supabase,financeBaseline);
       adminFinance = {
         revenue: (monthPayments.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
         expenses: (monthExpenses.data || []).reduce((sum:number,row:any)=>sum+Number(row.amount||0),0),
