@@ -74,8 +74,8 @@ export async function buildFinanceDashboardData(supabase:any, baselineInput:any)
   if(paymentError) throw paymentError;
   if(expenseError) throw expenseError;
 
-  const monthly=(baseline.monthly||[]).map((row:any)=>({...row}));
-  const monthMap=new Map(monthly.map((row:any)=>[row.month,row]));
+  const monthly:any[]=(baseline.monthly||[]).map((row:any)=>({...row}));
+  const monthMap:Map<string,any>=new Map<string,any>(monthly.map((row:any)=>[String(row.month),row]));
   const baselineLedger=(baseline.ledger||[]).map((row:any)=>({...row}));
   const baselineAlerts=(baseline.alerts||[]).map((row:any)=>({...row}));
 
@@ -267,7 +267,7 @@ export async function buildFinanceDashboardData(supabase:any, baselineInput:any)
 
   const health:any={OK:0,MEDIUM:0,HIGH:0,CRITICAL:0};
   for(const alert of alerts) health[alert.severity]=(health[alert.severity]||0)+1;
-  const baselineHealthTotal=Object.values(baseline.health||{}).reduce((s:any,v:any)=>s+n(v),0);
+  const baselineHealthTotal:number=Object.values(baseline.health||{}).reduce<number>((sum:number,value:unknown)=>sum+n(value),0);
   const knownStudentCount=Math.max(baselineHealthTotal,(accounts||[]).length);
   health.OK=Math.max(0,knownStudentCount-new Set(alerts.map((x:any)=>normalizeText(x.id||x.student))).size);
 
