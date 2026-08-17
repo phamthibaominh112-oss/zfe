@@ -168,16 +168,78 @@ export async function buildBusinessIntelligenceData(admin:any,template:string,se
     if(current.stopped>=2) warnings.push({level:"High",title:"Stop list tăng",detail:`${current.stopped} học viên ghi nhận Stopped trong tháng.`});
   }
 
+  const learnerSummary={
+    total:(students||[]).length,
+    active:(students||[]).filter((s:any)=>s.status==="Active").length,
+    paused:(students||[]).filter((s:any)=>s.status==="Paused").length,
+    stopped:(students||[]).filter((s:any)=>s.status==="Stopped").length,
+    waiting:(students||[]).filter((s:any)=>s.status==="Waiting for class").length,
+    stopList,riskList
+  };
+
+  const outstanding=(tuition||[]).reduce((sum:number,row:any)=>sum+n(row.balance_amount),0);
+  const highRisk=riskList.filter((x:any)=>x.severity==="High").length;
+  const mediumRisk=riskList.filter((x:any)=>x.severity==="Medium").length;
+  const expectedRevenue=targets.revenue*timeProgress;
+  const expectedStudents=targets.newStudents*timeProgress;
+  const expectedProfit=targets.profit*timeProgress;
+  const revenueGap=Math.max(0,targets.revenue-n(current?.revenue));
+  const studentGap=Math.max(0,targets.newStudents-n(current?.newStudents));
+  const profitGap=Math.max(0,targets.profit-n(current?.profit));
+  const paceRevenueGap=n(current?.revenue)-expectedRevenue;
+  const paceStudentGap=n(current?.newStudents)-expectedStudents;
+  const paceProfitGap=n(current?.profit)-expectedProfit;
+  const expenseRatio=n(current?.revenue)>0?n(current?.expense)/n(current?.revenue):0;
+  const profitMargin=n(current?.revenue)>0?n(current?.profit)/n(current?.revenue):0;
+  const cashConversion=n(current?.recognized)>0?n(current?.cash)/n(current?.recognized):0;
+  const activeRate=learnerSummary.total>0?learnerSummary.active/learnerSummary.total:0;
+  const unallocated=n(finance?.kpi?.unallocated);
+
+  const drivers:any[]=[];
+  if(studentGap>0) drivers.push({kind:"growth",priority:paceStudentGap<0?"High":"Medium",title:"Thiếu đầu vào HV mới",value:`Còn ${Math.ceil(studentGap)} HV để đạt KPI`,detail:`Tiến độ hiện tại ${n(current?.newStudents)}/${targets.newStudents}. Đây là nguồn tăng trưởng đầu kỳ quan trọng nhất.`});
+  if(outstanding>0) drivers.push({kind:"cash",priority:outstanding>=10000000?"High":"Medium",title:"Công nợ đang khóa cash",value:`${outstanding.toLocaleString("vi-VN")}đ`,detail:"Doanh thu và cash không giống nhau; khoản này ảnh hưởng khả năng chuyển doanh thu thành tiền thực thu."});
+  if(highRisk>0) drivers.push({kind:"retention",priority:"High",title:"HV có nguy cơ rụng",value:`${highRisk} High Risk`,detail:`Thêm ${mediumRisk} Medium Risk. Retention xấu sẽ làm giảm future revenue và tái phí.`});
+  if(unallocated>0) drivers.push({kind:"data",priority:"Medium",title:"Revenue chưa phân bổ được",value:`${unallocated.toLocaleString("vi-VN")}đ`,detail:"Thiếu Start/End date hoặc dữ liệu enrollment làm Business Intel chưa phân bổ được doanh thu đúng kỳ."});
+  if(expenseRatio>.65) drivers.push({kind:"cost",priority:"High",title:"Cost đang ăn mạnh vào revenue",value:`${(expenseRatio*100).toFixed(0)}% revenue`,detail:`Profit margin hiện ${(profitMargin*100).toFixed(0)}%. Cần kiểm tra payroll và variable cost.`});
+  else if(expenseRatio>.5) drivers.push({kind:"cost",priority:"Medium",title:"Cost ratio cần theo dõi",value:`${(expenseRatio*100).toFixed(0)}% revenue`,detail:`Profit margin hiện ${(profitMargin*100).toFixed(0)}%.`});
+  if(!drivers.length) drivers.push({kind:"healthy",priority:"Low",title:"Không có driver xấu nổi bật",value:"Business đang tương đối cân bằng",detail:"Tiếp tục theo dõi KPI và learner signals theo tuần."});
+
+  const actions:any[]=[];
+  if(paceStudentGap<0) actions.push({owner:"Growth / CSKH",action:`Bù ít nhất ${Math.max(1,Math.ceil(expectedStudents-n(current?.newStudents)))} HV mới để về đúng pace tháng`,why:"KPI HV mới đang chạy chậm hơn timeline."});
+  if(outstanding>0) actions.push({owner:"CSKH",action:"Ưu tiên follow-up các khoản công nợ và renewal gần hạn",why:`Outstanding hiện ${outstanding.toLocaleString("vi-VN")}đ.`});
+  if(highRisk>0) actions.push({owner:"Academic + CSKH",action:`Can thiệp ${highRisk} HV High Risk trước`,why:"Attendance/status/schedule/tuition đang tạo tín hiệu rụng."});
+  if(unallocated>0) actions.push({owner:"Admin / CSKH",action:"Bổ sung Start date / End date cho enrollment thiếu dữ liệu",why:"Để revenue allocation và forecast không bị sai."});
+  if(paceProfitGap<0) actions.push({owner:"Founder / Admin",action:"Review cost + revenue gap trước cuối tháng",why:`Profit đang thấp hơn pace ${Math.abs(paceProfitGap).toLocaleString("vi-VN")}đ.`});
+  if(!actions.length) actions.push({owner:"Founder",action:"Giữ cadence hiện tại và review lại vào tuần sau",why:"Chưa có gap lớn so với pace tháng."});
+
+  const recentMonths=monthly.filter((r:any)=>r.month<=selectedMonth).slice(-6).map((r:any)=>({
+    ...r,
+    revenueVsTarget:targets.revenue>0?r.revenue/targets.revenue:0,
+    profitVsTarget:targets.profit>0?r.profit/targets.profit:0,
+    studentsVsTarget:targets.newStudents>0?r.newStudents/targets.newStudents:0
+  }));
+
+  const businessScore=Math.max(0,Math.min(100,Math.round(
+    Math.min(1,n(current?.revenueProgress))*35+
+    Math.min(1,n(current?.studentProgress))*20+
+    Math.min(1,n(current?.profitProgress))*30+
+    Math.min(1,activeRate)*15
+  )));
+
   return {
     finance,targets,current,monthly,timeProgress,
-    learners:{
-      total:(students||[]).length,
-      active:(students||[]).filter((s:any)=>s.status==="Active").length,
-      paused:(students||[]).filter((s:any)=>s.status==="Paused").length,
-      stopped:(students||[]).filter((s:any)=>s.status==="Stopped").length,
-      waiting:(students||[]).filter((s:any)=>s.status==="Waiting for class").length,
-      stopList,riskList
-    },
-    warnings
+    learners:learnerSummary,
+    warnings,
+    executive:{
+      businessScore,
+      expectedRevenue,expectedStudents,expectedProfit,
+      revenueGap,studentGap,profitGap,
+      paceRevenueGap,paceStudentGap,paceProfitGap,
+      expenseRatio,profitMargin,cashConversion,activeRate,
+      outstanding,highRisk,mediumRisk,unallocated,
+      drivers:drivers.sort((a:any,b:any)=>({High:3,Medium:2,Low:1}[b.priority as "High"|"Medium"|"Low"]||0)-({High:3,Medium:2,Low:1}[a.priority as "High"|"Medium"|"Low"]||0)),
+      actions,
+      recentMonths
+    }
   };
 }

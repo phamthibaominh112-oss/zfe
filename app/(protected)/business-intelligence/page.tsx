@@ -10,8 +10,14 @@ import { buildBusinessIntelligenceData } from "@/lib/business-intelligence-data"
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDate, formatMoney } from "@/lib/format";
 
-function progress(value:number){return Math.max(0,Math.min(100,value*100));}
-function progressTone(value:number){return value>=1?"green":value>=.75?"yellow":"red";}
+function clamp(value:number){return Math.max(0,Math.min(100,value));}
+function pct(value:number){return `${Math.round(value*100)}%`;}
+function paceLabel(actual:number,expected:number,unit:string){
+  const delta=actual-expected;
+  if(Math.abs(delta)<0.01) return `Đúng pace`;
+  return delta>=0?`Nhanh hơn pace ${unit==="đ"?formatMoney(delta):`${Math.ceil(delta)} ${unit}`}`:`Chậm hơn pace ${unit==="đ"?formatMoney(Math.abs(delta)):`${Math.ceil(Math.abs(delta))} ${unit}`}`;
+}
+function healthClass(actual:number,expected:number){return actual>=expected?"good":actual>=expected*.85?"watch":"risk";}
 function injectData(template:string,data:unknown){
   const marker="const D=",start=template.indexOf(marker);
   if(start<0) throw new Error("Finance template missing const D.");
@@ -19,20 +25,25 @@ function injectData(template:string,data:unknown){
   if(end<0) throw new Error("Finance template data block cannot be replaced.");
   return `${template.slice(0,jsonStart)}${JSON.stringify(data)}${template.slice(end)}`;
 }
+function joined(value:unknown):Record<string,any>|null{
+  if(Array.isArray(value)) return (value[0] as Record<string,any>|undefined)||null;
+  return value&&typeof value==="object"?value as Record<string,any>:null;
+}
 
 export default async function BusinessIntelligencePage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
   const profile=await requireBusinessIntelligenceAccess();
   const params=await searchParams;
-  const tab=["overview","finance","learners","kpi","access"].includes(params.tab||"")?String(params.tab):"overview";
+  const view=["overview","finance","learners","settings"].includes(params.view||"")?String(params.view):"overview";
   const month=/^\d{4}-\d{2}$/.test(params.month||"")?String(params.month):new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"}).slice(0,7);
   const admin=createAdminClient();
   const template=await fs.readFile(path.join(process.cwd(),"content","finance-dashboard-v4-live-template.html"),"utf8");
   const data=await buildBusinessIntelligenceData(admin,template,month);
   const current=data.current;
+  const x=data.executive;
   const adminOnly=profile.role==="admin";
 
   let profiles:any[]=[];let grants:any[]=[];
-  if(adminOnly&&tab==="access"){
+  if(adminOnly&&view==="settings"){
     const [p,g]=await Promise.all([
       admin.from("profiles").select("id,full_name,role,is_active").eq("is_active",true).order("full_name"),
       admin.from("business_intelligence_access").select("user_id,access_level,granted_at,profiles(full_name,role)").order("granted_at")
@@ -40,84 +51,112 @@ export default async function BusinessIntelligencePage({searchParams}:{searchPar
     profiles=p.data||[];grants=g.data||[];
   }
 
-  const tabs=[
-    ["overview","Executive"],["finance","Finance"],["learners","Learners & Retention"],["kpi","KPI & Trend"],
-    ...(adminOnly?[["access","Access"]]:[])
-  ];
-
   return <>
-    <PageHeader eyebrow="Business Intelligence" title="Business Intelligence" description="Một nơi để Founder / Co-founder theo dõi revenue, profit, tăng trưởng học viên, retention, stop list và tiến độ KPI."/>
+    <PageHeader eyebrow="Business Intelligence" title="Business Health" description="Một dòng logic: Growth → Revenue → Cost → Profit → Retention → Action."/>
     <Flash message={params.message} error={params.error}/>
-    <nav className="business-intel-tabs">{tabs.map(([key,label])=><Link key={key} className={tab===key?"bi-tab active":"bi-tab"} href={`/business-intelligence?tab=${key}&month=${month}`}>{label}</Link>)}</nav>
-    <form className="month-filter bi-month-filter" method="get"><input type="hidden" name="tab" value={tab}/><label>Tháng<input type="month" name="month" defaultValue={month}/></label><button className="button button-primary">Xem tháng</button></form>
 
-    {tab==="overview"?<>
-      <div className="bi-executive-grid">
-        <section className="bi-kpi-card"><span>Revenue KPI</span><strong>{formatMoney(current?.revenue||0)}</strong><small>/ {formatMoney(data.targets.revenue)}</small><div className="bi-progress"><i style={{width:`${progress(current?.revenueProgress||0)}%`}}/></div><b className={`bi-progress-label ${progressTone(current?.revenueProgress||0)}`}>{progress(current?.revenueProgress||0).toFixed(0)}%</b></section>
-        <section className="bi-kpi-card"><span>HV mới KPI</span><strong>{current?.newStudents||0}</strong><small>/ {data.targets.newStudents} HV</small><div className="bi-progress"><i style={{width:`${progress(current?.studentProgress||0)}%`}}/></div><b className={`bi-progress-label ${progressTone(current?.studentProgress||0)}`}>{progress(current?.studentProgress||0).toFixed(0)}%</b></section>
-        <section className="bi-kpi-card"><span>Profit KPI</span><strong>{formatMoney(current?.profit||0)}</strong><small>/ {formatMoney(data.targets.profit)}</small><div className="bi-progress"><i style={{width:`${progress(current?.profitProgress||0)}%`}}/></div><b className={`bi-progress-label ${progressTone(current?.profitProgress||0)}`}>{progress(current?.profitProgress||0).toFixed(0)}%</b></section>
-        <section className="bi-kpi-card timeline"><span>Thời gian tháng đã đi</span><strong>{(data.timeProgress*100).toFixed(0)}%</strong><small>So tiến độ KPI với timeline thực tế</small></section>
+    <div className="bi-control-bar">
+      <nav className="bi-simple-nav">
+        <Link className={view==="overview"?"active":""} href={`/business-intelligence?view=overview&month=${month}`}>Tổng quan</Link>
+        <Link className={view==="finance"?"active":""} href={`/business-intelligence?view=finance&month=${month}`}>Tài chính chi tiết</Link>
+        <Link className={view==="learners"?"active":""} href={`/business-intelligence?view=learners&month=${month}`}>Học viên & Retention</Link>
+        {adminOnly?<Link className={view==="settings"?"active settings": "settings"} href={`/business-intelligence?view=settings&month=${month}`}>Thiết lập</Link>:null}
+      </nav>
+      <form className="bi-inline-month" method="get"><input type="hidden" name="view" value={view}/><input type="month" name="month" defaultValue={month}/><button className="button button-primary button-small">Xem</button></form>
+    </div>
+
+    {view==="overview"?<>
+      <section className="bi-command-center">
+        <div className="bi-score">
+          <span>BUSINESS HEALTH SCORE</span>
+          <strong>{x.businessScore}</strong>
+          <small>/100</small>
+          <p>{x.businessScore>=85?"Đang khỏe":x.businessScore>=70?"Ổn nhưng cần theo dõi":x.businessScore>=50?"Có gap cần xử lý":"Cần hành động ngay"}</p>
+        </div>
+        <div className="bi-kpi-strip">
+          <div className={healthClass(current?.revenue||0,x.expectedRevenue)}><span>REVENUE</span><strong>{formatMoney(current?.revenue||0)}</strong><small>KPI {formatMoney(data.targets.revenue)} · {paceLabel(current?.revenue||0,x.expectedRevenue,"đ")}</small><i><b style={{width:`${clamp((current?.revenueProgress||0)*100)}%`}}/></i></div>
+          <div className={healthClass(current?.newStudents||0,x.expectedStudents)}><span>HV MỚI</span><strong>{current?.newStudents||0} / {data.targets.newStudents}</strong><small>{paceLabel(current?.newStudents||0,x.expectedStudents,"HV")}</small><i><b style={{width:`${clamp((current?.studentProgress||0)*100)}%`}}/></i></div>
+          <div className={healthClass(current?.profit||0,x.expectedProfit)}><span>PROFIT</span><strong>{formatMoney(current?.profit||0)}</strong><small>KPI {formatMoney(data.targets.profit)} · {paceLabel(current?.profit||0,x.expectedProfit,"đ")}</small><i><b style={{width:`${clamp((current?.profitProgress||0)*100)}%`}}/></i></div>
+        </div>
+        <div className="bi-time-pace"><span>Tháng đã đi</span><strong>{pct(data.timeProgress)}</strong><small>KPI cũng nên đạt xấp xỉ mức này</small></div>
+      </section>
+
+      <section className="bi-flow-card">
+        <div className="bi-flow-step growth"><span>1 · GROWTH</span><strong>{current?.newStudents||0} HV mới</strong><small>{data.learners.active} HV active</small></div>
+        <div className="bi-flow-arrow">→</div>
+        <div className="bi-flow-step revenue"><span>2 · REVENUE</span><strong>{formatMoney(current?.revenue||0)}</strong><small>Recognized {formatMoney(current?.recognized||0)}</small></div>
+        <div className="bi-flow-arrow">→</div>
+        <div className="bi-flow-step cost"><span>3 · COST</span><strong>{formatMoney(current?.expense||0)}</strong><small>{pct(x.expenseRatio)} của revenue</small></div>
+        <div className="bi-flow-arrow">→</div>
+        <div className="bi-flow-step profit"><span>4 · PROFIT</span><strong>{formatMoney(current?.profit||0)}</strong><small>Margin {pct(x.profitMargin)}</small></div>
+        <div className="bi-flow-arrow">→</div>
+        <div className="bi-flow-step retention"><span>5 · RETENTION</span><strong>{x.highRisk} High Risk</strong><small>{data.learners.stopped} stopped · {data.learners.paused} paused</small></div>
+      </section>
+
+      <div className="bi-story-grid section-gap">
+        <Panel title="Vì sao business đang ở mức này?" description="Các driver được nối trực tiếp với KPI, cash, cost và retention.">
+          <div className="bi-driver-list">{x.drivers.slice(0,6).map((d:any,i:number)=><div className={`bi-driver ${d.priority.toLowerCase()}`} key={i}><div><span>{d.priority}</span><strong>{d.title}</strong><small>{d.detail}</small></div><b>{d.value}</b></div>)}</div>
+        </Panel>
+        <Panel title="Việc cần làm tiếp theo" description="Action queue theo mức độ ảnh hưởng, không chỉ là cảnh báo.">
+          <div className="bi-action-list">{x.actions.slice(0,6).map((a:any,i:number)=><div className="bi-action" key={i}><i>{i+1}</i><div><strong>{a.action}</strong><small>{a.owner} · {a.why}</small></div></div>)}</div>
+        </Panel>
       </div>
-      <div className="metrics-grid compact-metrics">
-        <MetricCard label="Recognized Revenue" value={formatMoney(current?.recognized||0)} tone="green"/>
-        <MetricCard label="Cash In" value={formatMoney(current?.cash||0)}/>
-        <MetricCard label="Expense recorded" value={formatMoney(current?.expense||0)} tone="yellow"/>
-        <MetricCard label="Active HV" value={data.learners.active}/>
-        <MetricCard label="Paused" value={data.learners.paused} tone="yellow"/>
-        <MetricCard label="Stopped" value={data.learners.stopped} tone={data.learners.stopped?"red":"green"}/>
+
+      <Panel className="section-gap" title="6 tháng gần nhất — nhìn xu hướng trong một hàng" description="Cùng một tháng: Revenue / Profit / HV mới được đặt cạnh nhau để nhìn tương quan, không tách thành nhiều chart.">
+        <div className="bi-trend-matrix">
+          <div className="bi-trend-head"><span>Tháng</span><span>Revenue / 150M</span><span>Profit / 70M</span><span>HV mới / 10</span><span>Stopped</span></div>
+          {x.recentMonths.map((r:any)=><div className={`bi-trend-row ${r.month===month?"current":""}`} key={r.month}>
+            <strong>{r.label}</strong>
+            <div><i><b style={{width:`${clamp(r.revenueVsTarget*100)}%`}}/></i><span>{formatMoney(r.revenue)} · {Math.round(r.revenueVsTarget*100)}%</span></div>
+            <div><i><b style={{width:`${clamp(Math.max(0,r.profitVsTarget)*100)}%`}}/></i><span>{formatMoney(r.profit)} · {Math.round(r.profitVsTarget*100)}%</span></div>
+            <div><i><b style={{width:`${clamp(r.studentsVsTarget*100)}%`}}/></i><span>{r.newStudents} HV · {Math.round(r.studentsVsTarget*100)}%</span></div>
+            <span className={r.stopped>0?"stop-count alert":"stop-count"}>{r.stopped}</span>
+          </div>)}
+        </div>
+      </Panel>
+
+      <div className="bi-health-grid section-gap">
+        <section><span>Cash conversion</span><strong>{pct(x.cashConversion)}</strong><small>{formatMoney(current?.cash||0)} cash / {formatMoney(current?.recognized||0)} recognized</small></section>
+        <section><span>Outstanding</span><strong>{formatMoney(x.outstanding)}</strong><small>Tiền chưa thu từ tuition accounts</small></section>
+        <section><span>Active learner rate</span><strong>{pct(x.activeRate)}</strong><small>{data.learners.active}/{data.learners.total} HV</small></section>
+        <section><span>Unallocated revenue</span><strong>{formatMoney(x.unallocated)}</strong><small>Dữ liệu chưa đủ để phân bổ đúng kỳ</small></section>
       </div>
+    </>:null}
+
+    {view==="finance"?<>
+      <div className="bi-context-banner"><strong>FINANCE DRILL-DOWN</strong><span>Trang này là chi tiết. Màn hình Tổng quan mới là nơi Founder đọc business health và mối quan hệ giữa các chỉ số.</span></div>
+      <FinanceDashboardFrame html={injectData(template,data.finance)}/>
+    </>:null}
+
+    {view==="learners"?<>
+      <section className="bi-retention-summary">
+        <div><span>Active</span><strong>{data.learners.active}</strong></div>
+        <div><span>Waiting</span><strong>{data.learners.waiting}</strong></div>
+        <div><span>Paused</span><strong>{data.learners.paused}</strong></div>
+        <div><span>Stopped</span><strong>{data.learners.stopped}</strong></div>
+        <div className="risk"><span>High Risk</span><strong>{x.highRisk}</strong></div>
+        <div><span>Outstanding</span><strong>{formatMoney(x.outstanding)}</strong></div>
+      </section>
       <div className="dashboard-main-grid section-gap">
-        <Panel title="Business warnings" description="Cảnh báo tự động theo KPI, MoM và learner retention">
-          {data.warnings.length?<div className="bi-warning-list">{data.warnings.map((w:any,i:number)=><div className={`bi-warning ${w.level.toLowerCase()}`} key={i}><strong>{w.title}</strong><span>{w.detail}</span></div>)}</div>:<Empty title="Không có cảnh báo lớn" description="Các KPI tháng đang đi tương đối đúng tiến độ."/>}
+        <Panel title={`Learner Risk Watch · ${data.learners.riskList.length}`} description="Ưu tiên theo nguy cơ rụng; click vào HV để xử lý.">
+          {data.learners.riskList.length?<div className="compact-list">{data.learners.riskList.map((r:any)=><div className="compact-row" key={r.id}><div><strong><Link className="text-link" href={`/students/${r.id}`}>{r.code} · {r.name}</Link></strong><span>{r.reasons.join(" · ")}</span></div><Status value={r.severity}/></div>)}</div>:<Empty title="Không có HV risk" description="Chưa có learner signal vượt ngưỡng."/>}
         </Panel>
-        <Panel title="Learners cần chú ý" description="Risk score từ status, attendance, công nợ, renewal và lịch học tương lai" action={<Link className="text-link" href={`/business-intelligence?tab=learners&month=${month}`}>Xem toàn bộ →</Link>}>
-          {data.learners.riskList.length?<div className="compact-list">{data.learners.riskList.slice(0,8).map((r:any)=><div className="compact-row" key={r.id}><div><strong>{r.code} · {r.name}</strong><span>{r.reasons.join(" · ")}</span></div><Status value={r.severity}/></div>)}</div>:<Empty title="Không có HV risk cao" description="Chưa có learner signal cần escalation."/>}
+        <Panel title={`Stop / Pause List · ${data.learners.stopList.length}`} description="Danh sách cần retention / win-back.">
+          {data.learners.stopList.length?<div className="compact-list">{data.learners.stopList.map((r:any)=><div className="compact-row" key={r.id}><div><strong><Link className="text-link" href={`/students/${r.id}`}>{r.code} · {r.name}</Link></strong><span>Cập nhật {formatDate(String(r.changedAt).slice(0,10))}</span></div><Status value={r.status}/></div>)}</div>:<Empty title="Không có HV Paused/Stopped" description="Stop list đang trống."/>}
         </Panel>
       </div>
     </>:null}
 
-    {tab==="finance"?<><div className="finance-live-note"><strong>BUSINESS INTEL · FINANCE</strong><span>Historical baseline + CenterOS live overlay. Thu phí, chi phí và payroll approved đều map về dashboard này.</span></div><FinanceDashboardFrame html={injectData(template,data.finance)}/></>:null}
-
-    {tab==="learners"?<>
-      <div className="metrics-grid compact-metrics">
-        <MetricCard label="Tổng HV" value={data.learners.total}/>
-        <MetricCard label="Active" value={data.learners.active} tone="green"/>
-        <MetricCard label="Waiting" value={data.learners.waiting}/>
-        <MetricCard label="Paused" value={data.learners.paused} tone="yellow"/>
-        <MetricCard label="Stopped" value={data.learners.stopped} tone="red"/>
-        <MetricCard label="HV mới tháng" value={current?.newStudents||0} note={`KPI ${data.targets.newStudents}`}/>
+    {view==="settings"&&adminOnly?<>
+      <div className="dashboard-main-grid">
+        <Panel title="KPI tháng" description="Chỉ chỉnh target ở đây; không để settings chen vào Executive dashboard.">
+          <form action={updateBusinessKpiSettings} className="bi-kpi-settings-simple"><Field label="Revenue / tháng" name="monthly_revenue_target" type="number" step="1000000" defaultValue={data.targets.revenue}/><Field label="HV mới / tháng" name="monthly_new_students_target" type="number" step="1" defaultValue={data.targets.newStudents}/><Field label="Profit / tháng" name="monthly_profit_target" type="number" step="1000000" defaultValue={data.targets.profit}/><button className="button button-primary">Lưu KPI</button></form>
+        </Panel>
+        <Panel title="Founder / Co-founder access" description="Cấp quyền xem Business Intelligence mà không cấp full Admin.">
+          <form action={grantBusinessIntelligenceAccess} className="bi-access-form"><SelectField label="Tài khoản" name="user_id" required options={profiles.filter((p:any)=>p.role!=="admin").map((p:any)=>({value:p.id,label:`${p.full_name} · ${p.role}`}))}/><SelectField label="Quyền" name="access_level" defaultValue="Viewer" options={[{value:"Viewer",label:"Viewer"},{value:"Owner",label:"Owner / Co-founder"}]}/><button className="button button-primary">Cấp quyền</button></form>
+          {grants.length?<div className="compact-list section-gap">{grants.map((g:any)=>{const p=joined(g.profiles);return <div className="compact-row" key={g.user_id}><div><strong>{p?.full_name||g.user_id}</strong><span>{p?.role} · {g.access_level}</span></div><form action={revokeBusinessIntelligenceAccess}><input type="hidden" name="user_id" value={g.user_id}/><button className="button button-danger button-small">Thu hồi</button></form></div>})}</div>:null}
+        </Panel>
       </div>
-      <Panel className="section-gap" title={`Stop List · ${data.learners.stopList.length}`} description="Paused/Stopped hiện tại. Status history được track tự động từ phiên bản này trở đi.">
-        {data.learners.stopList.length?<div className="table-wrap"><table className="bi-table"><thead><tr><th>Học viên</th><th>Status</th><th>Ghi nhận gần nhất</th></tr></thead><tbody>{data.learners.stopList.map((r:any)=><tr key={r.id}><td><Link className="text-link" href={`/students/${r.id}`}>{r.code} · {r.name}</Link></td><td><Status value={r.status}/></td><td>{formatDate(String(r.changedAt).slice(0,10))}</td></tr>)}</tbody></table></div>:<Empty title="Stop list trống" description="Chưa có HV Paused hoặc Stopped."/>}
-      </Panel>
-      <Panel className="section-gap" title={`Learner Risk Watch · ${data.learners.riskList.length}`} description="High/Medium risk dựa trên nhiều signal, không chỉ một trạng thái.">
-        {data.learners.riskList.length?<div className="table-wrap"><table className="bi-table risk"><thead><tr><th>HV</th><th>Risk</th><th>Attendance</th><th>Công nợ</th><th>Signals</th></tr></thead><tbody>{data.learners.riskList.map((r:any)=><tr key={r.id}><td><Link className="text-link" href={`/students/${r.id}`}>{r.code} · {r.name}</Link></td><td><Status value={r.severity}/></td><td>{r.attendanceRate==null?"—":`${(r.attendanceRate*100).toFixed(0)}%`}</td><td>{formatMoney(r.balance)}</td><td>{r.reasons.join(" · ")}</td></tr>)}</tbody></table></div>:<Empty title="Không có risk signal" description="Chưa có HV vượt ngưỡng cảnh báo."/>}
-      </Panel>
-    </>:null}
-
-    {tab==="kpi"?<>
-      {adminOnly?<Panel title="Monthly KPI Settings" description="Founder/Admin có thể chỉnh KPI; mặc định hiện tại là 150M · 10 HV · 70M."><form action={updateBusinessKpiSettings} className="bi-kpi-settings"><Field label="Revenue / tháng" name="monthly_revenue_target" type="number" step="1000000" defaultValue={data.targets.revenue}/><Field label="HV mới / tháng" name="monthly_new_students_target" type="number" step="1" defaultValue={data.targets.newStudents}/><Field label="Profit / tháng" name="monthly_profit_target" type="number" step="1000000" defaultValue={data.targets.profit}/><button className="button button-primary">Lưu KPI</button></form></Panel>:null}
-      <Panel className="section-gap" title="Monthly KPI Performance" description="Revenue dùng Allocated Revenue; Profit = Allocated Revenue – expense recorded trong tháng.">
-        <div className="table-wrap"><table className="bi-table kpi-trend"><thead><tr><th>Tháng</th><th>Revenue</th><th>HV mới</th><th>Profit</th><th>Stopped</th><th>Revenue KPI</th><th>HV KPI</th><th>Profit KPI</th></tr></thead><tbody>{data.monthly.filter((r:any)=>r.month>="2026-01"&&r.month<=month).reverse().slice(0,18).map((r:any)=><tr key={r.month}><td><strong>{r.label}</strong></td><td>{formatMoney(r.revenue)}</td><td>{r.newStudents}</td><td className={r.profit<0?"negative":""}>{formatMoney(r.profit)}</td><td>{r.stopped}</td><td>{(r.revenueProgress*100).toFixed(0)}%</td><td>{(r.studentProgress*100).toFixed(0)}%</td><td>{(r.profitProgress*100).toFixed(0)}%</td></tr>)}</tbody></table></div>
-      </Panel>
-    </>:null}
-
-    {tab==="access"&&adminOnly?<>
-      <Panel title="Founder / Co-founder access" description="Cấp quyền xem Business Intelligence mà không cần cấp full Admin.">
-        <form action={grantBusinessIntelligenceAccess} className="bi-access-form">
-          <SelectField label="Tài khoản" name="user_id" required options={profiles.filter((p:any)=>p.role!=="admin").map((p:any)=>({value:p.id,label:`${p.full_name} · ${p.role}`}))}/>
-          <SelectField label="Quyền" name="access_level" defaultValue="Viewer" options={[{value:"Viewer",label:"Viewer"},{value:"Owner",label:"Owner / Co-founder"}]}/>
-          <button className="button button-primary">Cấp quyền</button>
-        </form>
-      </Panel>
-      <Panel className="section-gap" title="Đang có quyền" description="Admin luôn có quyền mặc định.">
-        {grants.length?<div className="compact-list">{grants.map((g:any)=>{const p=joined(g.profiles);return <div className="compact-row" key={g.user_id}><div><strong>{p?.full_name||g.user_id}</strong><span>{p?.role} · {g.access_level}</span></div><form action={revokeBusinessIntelligenceAccess}><input type="hidden" name="user_id" value={g.user_id}/><button className="button button-danger button-small">Thu hồi</button></form></div>})}</div>:<Empty title="Chưa cấp viewer riêng" description="Chỉ Admin đang có quyền mặc định."/>}
-      </Panel>
     </>:null}
   </>;
-}
-
-function joined(value:unknown):Record<string,any>|null{
-  if(Array.isArray(value)) return (value[0] as Record<string,any>|undefined)||null;
-  return value&&typeof value==="object"?value as Record<string,any>:null;
 }
