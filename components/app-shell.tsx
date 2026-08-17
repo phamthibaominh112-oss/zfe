@@ -7,13 +7,16 @@ import { NAV_ITEMS, ROLE_LABELS, type Profile } from "@/lib/roles";
 import { signOut } from "@/app/auth-actions";
 import { canAccessStaffOps } from "@/lib/staff-ops";
 
-export function AppShell({ profile, unreadNotifications, children }: { profile: Profile; unreadNotifications: number; children: React.ReactNode }) {
+export function AppShell({ profile, unreadNotifications, businessIntelligenceAccess, children }: { profile: Profile; unreadNotifications: number; businessIntelligenceAccess: boolean; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const visible = [
     ...NAV_ITEMS[profile.role],
-    ...(canAccessStaffOps(profile) ? [{ href: "/staff-ops", label: profile.role === "admin" ? "Staff Ops Control" : "Staff Operations", short: "OPS" }] : [])
+    ...(businessIntelligenceAccess ? [{ href: "/business-intelligence", label: "Business Intelligence", short: "BI", group: "Business & Tài chính" }] : []),
+    ...(canAccessStaffOps(profile) ? [{ href: "/staff-ops", label: profile.role === "admin" ? "Staff Ops Control" : "Staff Operations", short: "OPS", group: profile.role==="admin"?"Hệ thống":undefined }] : [])
   ];
+  const grouped=profile.role==="admin";
+  const groups=grouped?["Vận hành","Học viên & Học thuật","Business & Tài chính","Hệ thống"]:[];
   const activeItem = visible.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const todayLabel = new Intl.DateTimeFormat("vi-VN", {
     weekday: "long",
@@ -35,13 +38,9 @@ export function AppShell({ profile, unreadNotifications, children }: { profile: 
           <small>Quản lý vận hành trung tâm</small>
         </div>
         <nav className="sidebar-nav" aria-label="Điều hướng chính">
-          {visible.map((item) => {
+          {grouped ? groups.map(group=>{const items=visible.filter(item=>item.group===group);const groupActive=items.some(item=>pathname===item.href||pathname.startsWith(`${item.href}/`));return <details className="sidebar-nav-group" key={group} open={groupActive||group==="Vận hành"}><summary>{group}<span>{items.length}</span></summary><div>{items.map(item=>{const active=pathname===item.href||pathname.startsWith(`${item.href}/`);return <Link className={active?"nav-item nav-active":"nav-item"} href={item.href} key={item.href} onClick={()=>setOpen(false)}><i aria-hidden="true">{item.short}</i><span>{item.label}</span></Link>})}</div></details>}) : visible.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link className={active ? "nav-item nav-active" : "nav-item"} href={item.href} key={item.href} onClick={() => setOpen(false)}>
-                <i aria-hidden="true">{item.short}</i><span>{item.label}</span>
-              </Link>
-            );
+            return <Link className={active ? "nav-item nav-active" : "nav-item"} href={item.href} key={item.href} onClick={() => setOpen(false)}><i aria-hidden="true">{item.short}</i><span>{item.label}</span></Link>;
           })}
         </nav>
         <div className="sidebar-bottom">

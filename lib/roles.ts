@@ -36,25 +36,28 @@ export type NavItem = {
   href: string;
   label: string;
   short: string;
+  group?: string;
 };
 
 const ADMIN_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Tổng quan", short: "⌂" },
-  { href: "/class-planner", label: "Xếp lớp & GV", short: "XL" },
-  { href: "/schedule", label: "Lịch trung tâm", short: "◷" },
-  { href: "/workforce", label: "Chấm công & nhân sự", short: "CC" },
-  { href: "/classes", label: "Lớp học", short: "▦" },
-  { href: "/students", label: "Học viên", short: "HV" },
-  { href: "/placement", label: "Placement Test", short: "PT" },
-  { href: "/academic", label: "Học thuật", short: "✓" },
-  { href: "/quality", label: "Chất lượng GV", short: "★" },
-  { href: "/finance", label: "Thu phí & tài chính", short: "₫" },
-  { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC" },
-  { href: "/finance-intelligence", label: "Finance Intelligence", short: "FI" },
-  { href: "/payroll", label: "Lương giáo viên", short: "LG" },
-  { href: "/catalog", label: "Chương trình", short: "PL" },
-  { href: "/sop", label: "SOP & Training", short: "SOP" },
-  { href: "/admin/users", label: "Người dùng & quyền", short: "⚙" }
+  { href: "/dashboard", label: "Tổng quan", short: "⌂", group: "Vận hành" },
+  { href: "/class-planner", label: "Xếp lớp & GV", short: "XL", group: "Vận hành" },
+  { href: "/schedule", label: "Lịch trung tâm", short: "◷", group: "Vận hành" },
+  { href: "/workforce", label: "Chấm công & nhân sự", short: "CC", group: "Vận hành" },
+
+  { href: "/classes", label: "Lớp học", short: "▦", group: "Học viên & Học thuật" },
+  { href: "/students", label: "Học viên", short: "HV", group: "Học viên & Học thuật" },
+  { href: "/placement", label: "Placement Test", short: "PT", group: "Học viên & Học thuật" },
+  { href: "/academic", label: "Học thuật", short: "✓", group: "Học viên & Học thuật" },
+  { href: "/quality", label: "Chất lượng GV", short: "★", group: "Học viên & Học thuật" },
+  { href: "/catalog", label: "Chương trình", short: "PL", group: "Học viên & Học thuật" },
+
+  { href: "/finance", label: "Thu phí & tái phí", short: "₫", group: "Business & Tài chính" },
+  { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC", group: "Business & Tài chính" },
+  { href: "/payroll", label: "Lương giáo viên", short: "LG", group: "Business & Tài chính" },
+
+  { href: "/sop", label: "SOP & Training", short: "SOP", group: "Hệ thống" },
+  { href: "/admin/users", label: "Người dùng & quyền", short: "⚙", group: "Hệ thống" }
 ];
 
 const ACADEMIC_NAV: NavItem[] = [

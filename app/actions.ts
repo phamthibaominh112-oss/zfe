@@ -1738,7 +1738,7 @@ export async function updateTuitionAccount(formData: FormData) {
     status
   }).eq("id", accountId);
   if (error) go("/finance", undefined, error.message);
-  revalidatePath("/finance");
+  revalidatePath("/finance"); revalidatePath("/business-intelligence");
   go("/finance", "Đã cập nhật tài khoản học phí.");
 }
 
@@ -1753,7 +1753,7 @@ export async function updatePayment(formData: FormData) {
     note: text(formData.get("note")) || null
   }).eq("id", text(formData.get("payment_id")));
   if (error) go("/finance", undefined, error.message);
-  revalidatePath("/finance");
+  revalidatePath("/finance"); revalidatePath("/business-intelligence"); revalidatePath("/dashboard");
   go("/finance", "Đã điều chỉnh payment transaction và tái tính công nợ.");
 }
 
@@ -1784,7 +1784,7 @@ export async function deletePaymentAndReceipt(formData: FormData) {
     p_payment_id:paymentId,p_reason:reason
   });
   if(error) go("/finance",undefined,error.message);
-  revalidatePath("/finance"); revalidatePath("/finance/reports"); revalidatePath("/dashboard");
+  revalidatePath("/finance"); revalidatePath("/finance/reports"); revalidatePath("/business-intelligence"); revalidatePath("/dashboard");
   go("/finance","Đã xóa phiếu thu và giao dịch. Doanh thu/công nợ đã tự tính lại.");
 }
 
@@ -1800,6 +1800,44 @@ export async function updateRenewalFollowup(formData: FormData) {
   if (error) go("/finance", undefined, error.message);
   revalidatePath("/finance");
   go("/finance", "Đã cập nhật follow-up tái phí.");
+}
+
+export async function updateBusinessKpiSettings(formData:FormData){
+  const profile=await requireRole(["admin"]);
+  const supabase=await createClient();
+  const revenue=toNumber(formData.get("monthly_revenue_target"));
+  const newStudents=Math.round(toNumber(formData.get("monthly_new_students_target")));
+  const profit=toNumber(formData.get("monthly_profit_target"));
+  if(revenue<0||newStudents<0||profit<0) go("/business-intelligence?tab=kpi",undefined,"KPI không thể là số âm.");
+  const {error}=await supabase.from("business_kpi_settings").upsert({
+    id:1,monthly_revenue_target:revenue,monthly_new_students_target:newStudents,
+    monthly_profit_target:profit,updated_at:new Date().toISOString(),updated_by:profile.id
+  });
+  if(error) go("/business-intelligence?tab=kpi",undefined,error.message);
+  revalidatePath("/business-intelligence");revalidatePath("/dashboard");
+  go("/business-intelligence?tab=kpi","Đã cập nhật KPI Business Intelligence.");
+}
+
+export async function grantBusinessIntelligenceAccess(formData:FormData){
+  const profile=await requireRole(["admin"]);
+  const supabase=await createClient();
+  const userId=text(formData.get("user_id"));
+  if(!userId) go("/business-intelligence?tab=access",undefined,"Chọn tài khoản cần cấp quyền.");
+  const {error}=await supabase.from("business_intelligence_access").upsert({
+    user_id:userId,access_level:text(formData.get("access_level"))||"Viewer",granted_by:profile.id,granted_at:new Date().toISOString()
+  });
+  if(error) go("/business-intelligence?tab=access",undefined,error.message);
+  revalidatePath("/business-intelligence");
+  go("/business-intelligence?tab=access","Đã cấp quyền Business Intelligence.");
+}
+
+export async function revokeBusinessIntelligenceAccess(formData:FormData){
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const {error}=await supabase.from("business_intelligence_access").delete().eq("user_id",text(formData.get("user_id")));
+  if(error) go("/business-intelligence?tab=access",undefined,error.message);
+  revalidatePath("/business-intelligence");
+  go("/business-intelligence?tab=access","Đã thu hồi quyền Business Intelligence.");
 }
 
 // v1.2.0 — Finance, expense accounting, receipts and notifications
@@ -1828,6 +1866,7 @@ export async function createExpense(formData: FormData) {
   if (error) go("/finance/expenses", undefined, error.message);
   revalidatePath("/finance/expenses");
   revalidatePath("/finance/reports");
+  revalidatePath("/business-intelligence");
   revalidatePath("/dashboard");
   go("/finance/expenses", "Đã ghi nhận chi phí.");
 }
@@ -1854,6 +1893,8 @@ export async function updateExpense(formData: FormData) {
   if (error) go("/finance/expenses", undefined, error.message);
   revalidatePath("/finance/expenses");
   revalidatePath("/finance/reports");
+  revalidatePath("/business-intelligence");
+  revalidatePath("/dashboard");
   go("/finance/expenses", "Đã cập nhật chi phí.");
 }
 
@@ -1868,6 +1909,8 @@ export async function archiveExpense(formData: FormData) {
   if (error) go("/finance/expenses", undefined, error.message);
   revalidatePath("/finance/expenses");
   revalidatePath("/finance/reports");
+  revalidatePath("/business-intelligence");
+  revalidatePath("/dashboard");
   go("/finance/expenses", "Đã huỷ và lưu trữ khoản chi. Dữ liệu vẫn được giữ trong audit log.");
 }
 
@@ -1914,6 +1957,8 @@ export async function postTeacherPayrollExpense(formData: FormData) {
   if (error) go("/finance/expenses", undefined, error.message);
   revalidatePath("/finance/expenses");
   revalidatePath("/finance/reports");
+  revalidatePath("/business-intelligence");
+  revalidatePath("/dashboard");
   go("/finance/expenses", "Đã ghi nhận chi phí lương giáo viên. Chạy lại sẽ cập nhật thay vì tạo trùng.");
 }
 
@@ -2043,6 +2088,7 @@ export async function adminApproveTeacherPayroll(formData: FormData) {
   revalidatePath("/payroll");
   revalidatePath("/finance/expenses");
   revalidatePath("/finance/reports");
+  revalidatePath("/business-intelligence");
   go(target, "Đã duyệt bảng lương và tự động ghi nhận vào chi phí tháng.");
 }
 
