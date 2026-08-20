@@ -1818,3 +1818,19 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
 @media(max-width:1100px){.learning-kpi-grid{grid-template-columns:repeat(3,1fr)}.learning-entry-grid,.academic-syllabus-strip{grid-template-columns:1fr 1fr}.class-syllabus-edit{grid-template-columns:1fr 1fr}.class-syllabus-edit>b{grid-column:1/-1}}
 @media(max-width:760px){.learning-journey,.skill-profile-grid,.learning-kpi-grid,.learning-entry-grid,.academic-syllabus-strip{grid-template-columns:1fr 1fr}.curriculum-duplicate-form,.class-syllabus-edit{grid-template-columns:1fr}.student-syllabus-list article{grid-template-columns:55px 1fr}.student-syllabus-list article>div:last-child{grid-column:2}.placement-owner-strip{grid-template-columns:1fr 1fr}.learning-history>div{grid-template-columns:70px 1fr 45px}}
+
+
+/* v2.0.1 canonical syllabus */
+.canonical-program-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.canonical-program-card{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff}
+.canonical-program-card.has-master{box-shadow:inset 0 4px 0 #2444d8}
+.canonical-program-card.missing-master{background:#fbfbfd}
+.canonical-program-card>header{display:flex;justify-content:space-between;gap:10px}
+.canonical-program-card header>div{display:grid;gap:3px}.canonical-program-card header span{font-size:9px;font-weight:900;color:#2444d8}.canonical-program-card header strong{font-size:13px}.canonical-program-card header small{font-size:9px;color:var(--muted)}
+.canonical-progress{display:grid;gap:5px}.canonical-progress>strong{font-size:18px}.canonical-progress>i{height:7px;border-radius:99px;background:#edf0f6;overflow:hidden}.canonical-progress>i>b{display:block;height:100%;background:#2444d8}.canonical-progress>small{font-size:9px;color:var(--muted)}
+.canonical-master-list{display:grid;gap:9px}.canonical-master-block{border:1px solid var(--line);border-radius:13px}.canonical-master-block>summary{display:flex;justify-content:space-between;padding:13px;cursor:pointer}.canonical-master-block summary>div{display:grid;gap:3px}.canonical-master-block summary strong{font-size:12px}.canonical-master-block summary span{font-size:9px;color:var(--muted)}.canonical-master-body{display:grid;gap:10px;padding:0 13px 13px}
+.canonical-session-table{display:grid;gap:4px}.canonical-session-row{display:grid;grid-template-columns:65px 1fr auto;gap:9px;padding:8px 10px;border-radius:9px;background:#f7f9fc;align-items:center}.canonical-session-row.missing{opacity:.55}.canonical-session-row.ready{border-left:3px solid #2b9a69}.canonical-session-row>div{display:grid;gap:2px}.canonical-session-row strong{font-size:10px}.canonical-session-row span{font-size:9px;color:var(--muted)}.canonical-session-row>div:last-child{display:flex;gap:8px}.canonical-session-row a{font-size:9px;font-weight:800;color:#2444d8}
+.class-inheritance-list{display:grid;gap:5px}.class-inheritance-list>div{display:grid;grid-template-columns:1fr 130px auto;gap:10px;align-items:center;padding:9px;border-bottom:1px solid var(--line)}.class-inheritance-list strong{font-size:10px}.class-inheritance-list>div>span{font-size:9px;color:#2444d8;font-weight:800}
+.override-list{display:grid;gap:6px}.override-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border:1px solid #f0d69a;border-radius:10px;background:#fff9e9}.override-row>div{display:grid;gap:3px}.override-row strong{font-size:10px}.override-row span{font-size:9px;color:var(--muted)}
+@media(max-width:1100px){.canonical-program-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.canonical-program-grid{grid-template-columns:1fr}.canonical-session-row,.class-inheritance-list>div{grid-template-columns:1fr}.canonical-session-row>div:last-child{justify-content:flex-start}}

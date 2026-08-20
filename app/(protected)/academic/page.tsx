@@ -5,6 +5,7 @@ import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/componen
 import { requireRole } from "@/lib/auth";
 import { formatDate, formatDateTime, sessionDisplayLabel } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { canonicalProgramFromClass, mergeSyllabusItem } from "@/lib/canonical-syllabus";
 
 export default async function AcademicPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
   const profile = await requireRole(["admin","academic_manager","customer_service","teacher"]);
@@ -12,7 +13,7 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
   const supabase = await createClient();
   const manager = profile.role !== "teacher";
 
-  const [sessions, enrollments, assignments, assessments, feedback, submissions, attendanceRows, syllabusRows] = await Promise.all([
+  const [sessions, enrollments, assignments, assessments, feedback, submissions, attendanceRows, syllabusMasters, syllabusOverrides] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(teachers(full_name))").gte("scheduled_date",new Date(Date.now()-14*86400000).toISOString().slice(0,10)).order("scheduled_date",{ascending:false}).limit(40),
     supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name),classes(id,code,name)").eq("status","Active").is("archived_at",null).limit(200),
     supabase.from("assignments").select("id,class_id,session_id,created_by,title,instructions,due_at,max_score,published_at,material_path,material_name,material_mime,material_size,classes(code,name),sessions(session_no)").is("archived_at",null).order("created_at",{ascending:false}).limit(30),
@@ -20,7 +21,8 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
     supabase.from("progress_feedback").select("id,enrollment_id,milestone,status,risk_level,current_performance,revision_note,submitted_at,enrollments(students(code,full_name),classes(code,name))").is("archived_at",null).order("updated_at",{ascending:false}).limit(30),
     supabase.from("assignment_submissions").select("id,assignment_id,student_id,file_path,status,submitted_at,score,feedback,assignments(title,max_score,classes(code)),students(code,full_name)").order("submitted_at",{ascending:false}).limit(40),
     supabase.from("attendance").select("id,session_id,student_id,status,late_minutes,reason,marked_at").gte("marked_at",new Date(Date.now()-7*86400000).toISOString()),
-    supabase.from("class_syllabus_items").select("id,class_id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path,material_file_name").order("session_no")
+    supabase.from("syllabus_templates").select("id,program_code,status,syllabus_template_items(id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path,material_file_name)").not("program_code","is",null).is("archived_at",null),
+    supabase.from("class_syllabus_overrides").select("id,class_id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path,material_file_name,override_reason").is("archived_at",null)
   ]);
 
   const classOptions = Array.from(new Map([
@@ -79,11 +81,16 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
     </FormGrid></form></FormDetails> : null}
   </div>;
 
+  const masterMap=new Map<string,any>();
+  for(const master of syllabusMasters.data||[]){
+    for(const item of master.syllabus_template_items||[]) masterMap.set(`${master.program_code}|${item.session_no}`,{...item,program_code:master.program_code});
+  }
+  const overrideMap=new Map((syllabusOverrides.data||[]).map((x:any)=>[`${x.class_id}|${x.session_no}`,x]));
   return <>
     <PageHeader eyebrow="Vận hành học thuật" title="Điểm danh, bài tập & đánh giá" description={profile.role === "teacher" ? "Cập nhật điểm danh, bài tập và phản hồi cho các lớp bạn phụ trách." : "Theo dõi điểm danh, mức độ hoàn thành bài tập, điểm số và các phản hồi đang chờ duyệt."} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
   <Panel className="section-gap" title="Syllabus buổi học" description="GV/Học vụ/CSKH nhìn cùng một nội dung đã được Admin/Học vụ duplicate từ syllabus master.">
-    {syllabusRows.data?.length?<div className="academic-syllabus-strip">{(sessions.data||[]).slice(0,12).map((s:any)=>{const sy=(syllabusRows.data||[]).find((x:any)=>x.class_id===s.class_id&&x.session_no===s.session_no);return <div className={`academic-syllabus-card ${sy?"ready":"missing"}`} key={s.id}><span>{s.classes?.code} · Buổi {s.session_no}</span><strong>{sy?.title||s.topic||"Chưa có syllabus"}</strong><small>{sy?.learning_objectives||sy?.content||formatDate(s.scheduled_date)}</small>{sy?.slide_url?<a href={sy.slide_url} target="_blank">Mở slide →</a>:null}</div>})}</div>:<Empty title="Chưa có syllabus class-level" description="Admin/Học vụ vào Chương trình & Syllabus để duplicate master xuống lớp."/>}
+    {(syllabusMasters.data?.length||syllabusOverrides.data?.length)?<div className="academic-syllabus-strip">{(sessions.data||[]).slice(0,12).map((s:any)=>{const p=canonicalProgramFromClass(s.classes?.code,s.classes?.name); const sy=mergeSyllabusItem(p?masterMap.get(`${p}|${s.session_no}`):null,overrideMap.get(`${s.class_id}|${s.session_no}`));return <div className={`academic-syllabus-card ${sy?"ready":"missing"}`} key={s.id}><span>{s.classes?.code} · Buổi {s.session_no}</span><strong>{sy?.title||s.topic||"Chưa có syllabus"}</strong><small>{sy?.learning_objectives||sy?.content||formatDate(s.scheduled_date)}</small>{sy?.slide_url?<a href={sy.slide_url} target="_blank">Mở slide →</a>:null}</div>})}</div>:<Empty title="Chưa có syllabus class-level" description="Admin/Học vụ vào Chương trình & Syllabus để duplicate master xuống lớp."/>}
   </Panel>
     <Panel className="section-gap attendance-command-center" title="Điểm danh theo Session" description="Bấm Session → roster của lớp hiện ngay → chọn trạng thái cho nhiều học viên → Lưu một lần.">
       {todaySessions.length ? <div className="attendance-session-selector">

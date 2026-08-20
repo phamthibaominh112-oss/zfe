@@ -1870,21 +1870,29 @@ export async function createSyllabusTemplate(formData:FormData){
   const profile=await requireRole(["admin","academic_manager"]);
   const supabase=await createClient();
   const file=formData.get("outline_file");
+  const programCode=text(formData.get("program_code")).toUpperCase();
+  const names:Record<string,string>={ZEB:"IELTS Beginner",ZEF:"IELTS Foundation",ZEE:"IELTS Entry",ZEM:"IELTS Master"};
+  if(!names[programCode])go("/curriculum",undefined,"Chỉ hỗ trợ syllabus chuẩn ZEB / ZEF / ZEE / ZEM.");
+
+  const existing=await supabase.from("syllabus_templates").select("id").eq("program_code",programCode).is("archived_at",null).maybeSingle();
+  if(existing.data)go("/curriculum",undefined,`${programCode} đã có syllabus master. Mỗi chương trình chỉ có 1 master.`);
+
   const {data:row,error:insertError}=await supabase.from("syllabus_templates").insert({
-    course_template_id:text(formData.get("course_template_id"))||null,
-    code:text(formData.get("code")),
-    name:text(formData.get("name")),
+    program_code:programCode,
+    course_template_id:null,
+    code:`${programCode}-MASTER-36`,
+    name:`${names[programCode]} · Master Syllabus`,
     description:text(formData.get("description"))||null,
-    version:Math.max(1,Math.round(toNumber(formData.get("version"),1))),
-    status:text(formData.get("status"))||"Draft",
+    version:1,
+    status:"Draft",
     created_by:profile.id
   }).select("id").single();
-  if(insertError||!row)go("/curriculum",undefined,insertError?.message||"Không tạo được syllabus.");
+  if(insertError||!row)go("/curriculum",undefined,insertError?.message||"Không tạo được syllabus master.");
 
   if(file instanceof File&&file.size){
     if(file.size>30*1024*1024)go("/curriculum",undefined,"Course outline tối đa 30MB.");
     const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
-    const path=`templates/${row.id}/${Date.now()}-${safe}`;
+    const path=`templates/${programCode}/${row.id}/${Date.now()}-${safe}`;
     const {error:uploadError}=await supabase.storage.from("course-materials").upload(path,file,{upsert:false,contentType:file.type||undefined});
     if(uploadError)go("/curriculum",undefined,`Không upload được outline: ${uploadError.message}`);
     await supabase.from("syllabus_templates").update({
@@ -1892,7 +1900,7 @@ export async function createSyllabusTemplate(formData:FormData){
     }).eq("id",row.id);
   }
   revalidatePath("/curriculum");
-  go("/curriculum","Đã tạo syllabus master.");
+  go("/curriculum",`Đã tạo ${programCode} Master. Bổ sung đủ 36 buổi rồi kích hoạt.`);
 }
 
 export async function addSyllabusTemplateItem(formData:FormData){
@@ -1900,8 +1908,10 @@ export async function addSyllabusTemplateItem(formData:FormData){
   const supabase=await createClient();
   const templateId=text(formData.get("template_id"));
   const file=formData.get("material_file");
+  const sessionNo=Math.round(toNumber(formData.get("session_no")));
+  if(sessionNo<1||sessionNo>36)go("/curriculum",undefined,"Syllabus chuẩn chỉ có Buổi 1–36.");
   const payload:any={
-    template_id:templateId,session_no:Math.round(toNumber(formData.get("session_no"))),
+    template_id:templateId,session_no:sessionNo,
     title:text(formData.get("title")),learning_objectives:text(formData.get("learning_objectives"))||null,
     content:text(formData.get("content"))||null,homework:text(formData.get("homework"))||null,
     slide_url:text(formData.get("slide_url"))||null,
@@ -1966,6 +1976,63 @@ export async function updateClassSyllabusItem(formData:FormData){
   if(error)go("/curriculum",undefined,error.message);
   revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
   go("/curriculum","Đã cập nhật syllabus của lớp.");
+}
+
+export async function activateCanonicalSyllabus(formData:FormData){
+  await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const templateId=text(formData.get("template_id"));
+  const {data:items,error:itemError}=await supabase.from("syllabus_template_items").select("session_no").eq("template_id",templateId);
+  if(itemError)go("/curriculum",undefined,itemError.message);
+  const nums=new Set((items||[]).map((x:any)=>Number(x.session_no)));
+  const missing=Array.from({length:36},(_,i)=>i+1).filter(n=>!nums.has(n));
+  if(nums.size!==36||missing.length)go("/curriculum",undefined,`Chưa thể kích hoạt: thiếu buổi ${missing.join(", ")||"không xác định"}.`);
+  const {error}=await supabase.from("syllabus_templates").update({status:"Active",updated_at:new Date().toISOString()}).eq("id",templateId);
+  if(error)go("/curriculum",undefined,error.message);
+  revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
+  go("/curriculum","Đã kích hoạt syllabus master 36/36.");
+}
+
+export async function saveClassSyllabusOverride(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const classId=text(formData.get("class_id"));
+  const sessionNo=Math.round(toNumber(formData.get("session_no")));
+  if(sessionNo<1||sessionNo>36)go("/curriculum",undefined,"Override chỉ áp dụng Buổi 1–36.");
+  const reason=text(formData.get("override_reason"));
+  if(!reason)go("/curriculum",undefined,"Phải ghi lý do override để giữ audit.");
+  const file=formData.get("material_file");
+  const payload:any={
+    class_id:classId,session_no:sessionNo,
+    title:text(formData.get("title"))||null,
+    learning_objectives:text(formData.get("learning_objectives"))||null,
+    content:text(formData.get("content"))||null,
+    homework:text(formData.get("homework"))||null,
+    slide_url:text(formData.get("slide_url"))||null,
+    override_reason:reason,updated_by:profile.id,updated_at:new Date().toISOString(),archived_at:null
+  };
+  if(file instanceof File&&file.size){
+    if(file.size>30*1024*1024)go("/curriculum",undefined,"Tài liệu tối đa 30MB.");
+    const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=`overrides/${classId}/${sessionNo}/${Date.now()}-${safe}`;
+    const {error:uploadError}=await supabase.storage.from("course-materials").upload(path,file,{upsert:false,contentType:file.type||undefined});
+    if(uploadError)go("/curriculum",undefined,uploadError.message);
+    Object.assign(payload,{material_file_path:path,material_file_name:file.name,material_file_mime:file.type||null,material_file_size:file.size});
+  }
+  const {error}=await supabase.from("class_syllabus_overrides").upsert(payload,{onConflict:"class_id,session_no"});
+  if(error)go("/curriculum",undefined,error.message);
+  revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
+  go("/curriculum",`Đã override riêng Buổi ${sessionNo} của lớp. Các buổi khác vẫn dùng syllabus gốc.`);
+}
+
+export async function removeClassSyllabusOverride(formData:FormData){
+  await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const id=text(formData.get("override_id"));
+  const {error}=await supabase.from("class_syllabus_overrides").update({archived_at:new Date().toISOString()}).eq("id",id);
+  if(error)go("/curriculum",undefined,error.message);
+  revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
+  go("/curriculum","Đã bỏ override. Buổi học quay lại đọc syllabus master.");
 }
 
 export async function saveStudentMilestoneScore(formData:FormData){

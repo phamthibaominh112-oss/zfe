@@ -5,6 +5,7 @@ import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/componen
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { buildLearningAnalytics, courseStage, IELTS_PATH } from "@/lib/student-learning";
+import { canonicalProgramFromClass, mergeSyllabusItem } from "@/lib/canonical-syllabus";
 import { formatDate } from "@/lib/format";
 
 function joined(value:unknown):Record<string,any>|null{if(Array.isArray(value))return value[0]||null;return value&&typeof value==="object"?value as Record<string,any>:null;}
@@ -36,9 +37,22 @@ export default async function StudentLearningRecord({params,searchParams}:{param
   const currentClass=analytics.activeClass;
   const returnPath=`/students/${id}/learning`;
 
-  const syllabus=classIds.length?await supabase.from("class_syllabus_items").select("*").in("class_id",classIds).order("session_no"):({data:[]} as any);
+  const [syllabusMasters,syllabusOverrides]=await Promise.all([
+    supabase.from("syllabus_templates").select("id,program_code,status,syllabus_template_items(*)").not("program_code","is",null).is("archived_at",null),
+    classIds.length?supabase.from("class_syllabus_overrides").select("*").in("class_id",classIds).is("archived_at",null):Promise.resolve({data:[] as any[]})
+  ]);
+  const masterMap=new Map<string,any>();
+  for(const master of syllabusMasters.data||[]){
+    for(const item of master.syllabus_template_items||[]) masterMap.set(`${master.program_code}|${item.session_no}`,{...item,program_code:master.program_code});
+  }
+  const overrideMap=new Map((syllabusOverrides.data||[]).map((x:any)=>[`${x.class_id}|${x.session_no}`,x]));
+  const resolvedSyllabus=(enrollments.data||[]).flatMap((enrollment:any)=>{
+    const p=canonicalProgramFromClass(enrollment.classes?.code,enrollment.classes?.name);
+    if(!p)return [];
+    return Array.from({length:36},(_,i)=>i+1).map(no=>mergeSyllabusItem(masterMap.get(`${p}|${no}`),overrideMap.get(`${enrollment.class_id}|${no}`))).filter(Boolean).map((item:any)=>({...item,class_id:enrollment.class_id,class_code:enrollment.classes?.code}));
+  });
   const signed=new Map<string,string>();
-  await Promise.all((syllabus.data||[]).filter((x:any)=>x.material_file_path).map(async(x:any)=>{const {data}=await supabase.storage.from("course-materials").createSignedUrl(x.material_file_path,3600);if(data?.signedUrl)signed.set(x.id,data.signedUrl);}));
+  await Promise.all(resolvedSyllabus.filter((x:any)=>x.material_file_path).map(async(x:any)=>{const {data}=await supabase.storage.from("course-materials").createSignedUrl(x.material_file_path,3600);if(data?.signedUrl)signed.set(`${x.class_id}|${x.session_no}`,data.signedUrl);}));
 
   return <>
     <PageHeader eyebrow="Student Learning Record" title={`${student.code} · ${student.full_name}`} description="Một hồ sơ học tập xuyên suốt: course journey → attendance/HW → Mid/Final → skill profile → forecast → recommendation."
@@ -86,7 +100,7 @@ export default async function StudentLearningRecord({params,searchParams}:{param
     </div>
 
     <Panel className="section-gap" title="Syllabus & nội dung từng buổi" description="GV và HV cùng nhìn một nguồn: học gì · mục tiêu gì · homework · slide/tài liệu.">
-      {syllabus.data?.length?<div className="student-syllabus-list">{syllabus.data.map((item:any)=><article key={item.id}><b>Buổi {item.session_no}</b><div><strong>{item.title}</strong><span>{item.learning_objectives||"—"}</span>{item.content?<p>{item.content}</p>:null}{item.homework?<small>Homework: {item.homework}</small>:null}</div><div>{item.slide_url?<a className="button button-secondary button-small" href={item.slide_url} target="_blank">Slide</a>:null}{item.material_file_path?<a className="button button-secondary button-small" href={signed.get(item.id)||"#"} target="_blank">Tài liệu</a>:null}</div></article>)}</div>:<Empty title="Lớp chưa được gắn syllabus" description="Admin/Học vụ duplicate syllabus master vào lớp trước."/>}
+      {resolvedSyllabus.length?<div className="student-syllabus-list">{resolvedSyllabus.map((item:any)=><article key={`${item.class_id}-${item.session_no}`}><b>Buổi {item.session_no}</b><div><strong>{item.title}</strong><span>{item.learning_objectives||"—"}</span>{item.content?<p>{item.content}</p>:null}{item.homework?<small>Homework: {item.homework}</small>:null}</div><div>{item.slide_url?<a className="button button-secondary button-small" href={item.slide_url} target="_blank">Slide</a>:null}{item.material_file_path?<a className="button button-secondary button-small" href={signed.get(`${item.class_id}|${item.session_no}`)||"#"} target="_blank">Tài liệu</a>:null}</div></article>)}</div>:<Empty title="Lớp chưa được gắn syllabus" description="Admin/Học vụ duplicate syllabus master vào lớp trước."/>}
     </Panel>
   </>;
 }

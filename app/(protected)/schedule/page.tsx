@@ -81,7 +81,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
   const admin = canManage ? createAdminClient() : null;
-  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings, observerAssignments, observerCandidates, fullPlacementTests, syllabusItems] = await Promise.all([
+  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings, observerAssignments, observerCandidates, fullPlacementTests, syllabusMasters, syllabusOverrides] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
@@ -93,7 +93,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("session_observers").select("id,session_id,observer_user_id,observer_name,note"),
     canManage && admin ? admin.from("profiles").select("id,full_name,role,is_active").in("role",["admin","academic_manager"]).eq("is_active",true).order("full_name") : Promise.resolve({data:[] as any[]}),
     ownTeacher ? supabase.from("placement_tests").select("id,assigned_teacher_id,scheduled_start,duration_minutes,status,external_token,students(code,full_name)").eq("assigned_teacher_id",ownTeacher.id).gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).neq("status","Cancelled").order("scheduled_start") : Promise.resolve({data:[] as any[]}),
-    supabase.from("class_syllabus_items").select("id,class_id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path").order("session_no")
+    supabase.from("syllabus_templates").select("id,program_code,status,syllabus_template_items(id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path)").not("program_code","is",null).is("archived_at",null),
+    supabase.from("class_syllabus_overrides").select("id,class_id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path,override_reason").is("archived_at",null)
   ]);
 
   const selectedClassId = canManage ? String(params.class || "") : "";
@@ -168,7 +169,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? teacherFilteredSessions.filter((item:any)=>observerBySession.get(item.id)?.observer_user_id === selectedObserverId)
       : teacherFilteredSessions;
   const allPlacementBookings=(placementBookings.data||[]).filter((b:any)=>joined(b.placement_tests)?.status!=="Cancelled");
-  const syllabusMap=new Map((syllabusItems.data||[]).map((x:any)=>[`${x.class_id}|${x.session_no}`,x]));
+  const masterMap=new Map<string,any>();
+  for(const master of syllabusMasters.data||[]){
+    for(const item of master.syllabus_template_items||[]) masterMap.set(`${master.program_code}|${item.session_no}`,{...item,program_code:master.program_code});
+  }
+  const overrideMap=new Map((syllabusOverrides.data||[]).map((x:any)=>[`${x.class_id}|${x.session_no}`,x]));
   const fullPlacementRows=fullPlacementTests.data||[];
   const visiblePlacementBookings = selectedObserverId
     ? []
