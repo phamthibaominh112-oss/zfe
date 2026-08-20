@@ -81,7 +81,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   const canManage = ["admin","academic_manager"].includes(profile.role);
   const admin = canManage ? createAdminClient() : null;
-  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings, observerAssignments, observerCandidates] = await Promise.all([
+  const [sessions, availability, studentAvailability, teachers, classes, students, enrollments, placementBookings, observerAssignments, observerCandidates, fullPlacementTests, syllabusItems] = await Promise.all([
     supabase.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,duration_hours,mode,campus,room,status,topic,meeting_url,classes(code,name),session_teachers(role,teachers(id,code,full_name))").gte("scheduled_date",start).lte("scheduled_date",end).is("archived_at",null).order("scheduled_date").order("start_time"),
     profile.role === "student" ? Promise.resolve({data:[] as any[]}) : supabase.from("teacher_availability").select("id,weekday,start_time,end_time,mode,campus,effective_from,effective_to,is_recurring,note,teachers(id,code,full_name)").order("weekday").order("start_time"),
     canManage ? supabase.from("student_availability").select("id,student_id,weekday,start_time,end_time,effective_from,effective_to,is_recurring,note,students(id,code,full_name,status)").order("weekday").order("start_time") : Promise.resolve({data:[] as any[]}),
@@ -91,7 +91,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     canManage ? supabase.from("enrollments").select("id,class_id,student_id,status,students(id,code,full_name)").eq("status","Active").is("archived_at",null) : Promise.resolve({data:[] as any[]}),
     profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("placement_speaking_bookings").select("id,teacher_id,scheduled_start,duration_minutes,status,placement_tests(id,status,students(id,code,full_name)),teachers(id,code,full_name)").gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).order("scheduled_start"),
     profile.role==="student" ? Promise.resolve({data:[] as any[]}) : supabase.from("session_observers").select("id,session_id,observer_user_id,observer_name,note"),
-    canManage && admin ? admin.from("profiles").select("id,full_name,role,is_active").in("role",["admin","academic_manager"]).eq("is_active",true).order("full_name") : Promise.resolve({data:[] as any[]})
+    canManage && admin ? admin.from("profiles").select("id,full_name,role,is_active").in("role",["admin","academic_manager"]).eq("is_active",true).order("full_name") : Promise.resolve({data:[] as any[]}),
+    ownTeacher ? supabase.from("placement_tests").select("id,assigned_teacher_id,scheduled_start,duration_minutes,status,external_token,students(code,full_name)").eq("assigned_teacher_id",ownTeacher.id).gte("scheduled_start",`${start}T00:00:00+07:00`).lte("scheduled_start",`${end}T23:59:59+07:00`).neq("status","Cancelled").order("scheduled_start") : Promise.resolve({data:[] as any[]}),
+    supabase.from("class_syllabus_items").select("id,class_id,session_no,title,learning_objectives,content,homework,slide_url,material_file_path").order("session_no")
   ]);
 
   const selectedClassId = canManage ? String(params.class || "") : "";
@@ -166,6 +168,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       ? teacherFilteredSessions.filter((item:any)=>observerBySession.get(item.id)?.observer_user_id === selectedObserverId)
       : teacherFilteredSessions;
   const allPlacementBookings=(placementBookings.data||[]).filter((b:any)=>joined(b.placement_tests)?.status!=="Cancelled");
+  const syllabusMap=new Map((syllabusItems.data||[]).map((x:any)=>[`${x.class_id}|${x.session_no}`,x]));
+  const fullPlacementRows=fullPlacementTests.data||[];
   const visiblePlacementBookings = selectedObserverId
     ? []
     : profile.role==="teacher"
@@ -284,11 +288,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         {days.map((day,index)=>{
           const key=dateOnlyString(day);
           const items=visibleSessions.filter((x:any)=>x.scheduled_date===key);
-          const placementItems=visiblePlacementBookings.filter((x:any)=>placementDateParts(x.scheduled_start).date===key);
+          const placementItems=visiblePlacementBookings.filter((x:any)=>placementDateParts(x.scheduled_start).date===key); const fullPlacementItems=fullPlacementRows.filter((x:any)=>placementDateParts(x.scheduled_start).date===key);
           const isToday = key === today;
           return <section className={`day-column ${isToday ? "day-today" : ""}`} key={key}>
-            <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length + placementItems.length} lịch</small></div>
+            <div className="day-header"><span>{DAY_LABELS[index]}{isToday ? " · Hôm nay" : ""}</span><strong>{day.getUTCDate().toString().padStart(2,"0")}/{(day.getUTCMonth()+1).toString().padStart(2,"0")}</strong><small>{items.length + placementItems.length + fullPlacementItems.length} lịch</small></div>
             <div className="day-events">
+              {fullPlacementItems.map((pt:any)=>{const st=joined(pt.students);const dt=placementDateParts(pt.scheduled_start);return <article className="session-card placement-calendar-card full-placement" key={`full-placement-${pt.id}`}><div className="session-time-row"><strong>{dt.time}</strong><span>{pt.duration_minutes}p</span></div><h3>Placement Full Test</h3><p>{st?.code} · {st?.full_name}</p><small>{pt.external_token}</small><div className="session-footer"><span className="mode-dot placement-mode">Placement</span><Status value={pt.status}/></div><a className="session-link" href="/placement">Mở Placement →</a></article>})}
               {placementItems.map((booking:any)=>{const pt=joined(booking.placement_tests);const st=joined(pt?.students);const dt=placementDateParts(booking.scheduled_start);return <article className={`session-card placement-calendar-card ${booking.status==="Cancelled"?"cancelled":""}`} key={`placement-${booking.id}`}><div className="session-time-row"><strong>{dt.time}</strong><span>15p</span></div><h3>Placement Speaking</h3><p>{st?.code} · {st?.full_name}</p><small>Assessor: {joined(booking.teachers)?.full_name || ownTeacher?.full_name || "GV"}</small><div className="session-footer"><span className="mode-dot placement-mode">Placement</span><Status value={booking.status}/></div><a className="session-link" href="/placement">Mở Placement →</a></article>})}
               {items.length ? items.map((item:any)=>{
               const classRow = joined(item.classes);

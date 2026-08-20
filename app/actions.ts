@@ -36,6 +36,11 @@ function vietnamLocalDateTimeIso(rawValue: string) {
   return date.toISOString();
 }
 
+function academicReturnPath(formData:FormData){
+  const requested=text(formData.get("return_path"));
+  return requested&&requested.startsWith("/")?requested:"/academic";
+}
+
 function scheduleReturnPath(formData: FormData) {
   const params = new URLSearchParams();
   const week = text(formData.get("return_week"));
@@ -391,7 +396,7 @@ export async function saveTeacherWeeklyAvailability(formData: FormData) {
 }
 
 export async function createTeacherAvailability(formData: FormData) {
-  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const profile = await requireRole(["admin", "academic_manager", "customer_service", "teacher"]);
   const supabase = await createClient();
   let teacherId = text(formData.get("teacher_id"));
   if (profile.role === "teacher") {
@@ -826,7 +831,7 @@ export async function createSession(formData: FormData) {
 }
 
 export async function completeSession(formData: FormData) {
-  await requireRole(["admin", "academic_manager", "teacher"]);
+  await requireRole(["admin", "academic_manager", "customer_service", "teacher"]);
   const supabase = await createClient();
   const sessionId = text(formData.get("session_id"));
   const { error } = await supabase.rpc("complete_teaching_session", { p_session_id: sessionId, p_topic: text(formData.get("topic")) || null });
@@ -916,7 +921,7 @@ export async function markAllPresentForSession(formData: FormData) {
 }
 
 export async function markAttendance(formData: FormData) {
-  const profile = await requireRole(["admin", "academic_manager", "teacher"]);
+  const profile = await requireRole(["admin", "academic_manager", "customer_service", "teacher"]);
   const supabase = await createClient();
   const { error } = await supabase.from("attendance").upsert({
     session_id: text(formData.get("session_id")),
@@ -927,9 +932,10 @@ export async function markAttendance(formData: FormData) {
     marked_by: profile.id,
     marked_at: new Date().toISOString()
   }, { onConflict: "session_id,student_id" });
-  if (error) go("/academic", undefined, error.message);
-  revalidatePath("/academic");
-  go("/academic", "Đã cập nhật attendance.");
+  const target=academicReturnPath(formData);
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/academic"); revalidatePath(target);
+  go(target, "Đã cập nhật attendance.");
 }
 
 export async function saveHomework(formData: FormData) {
@@ -943,9 +949,10 @@ export async function saveHomework(formData: FormData) {
     marked_by: profile.id,
     marked_at: new Date().toISOString()
   }, { onConflict: "session_id,student_id" });
-  if (error) go("/academic", undefined, error.message);
-  revalidatePath("/academic");
-  go("/academic", "Đã cập nhật homework completion.");
+  const target=academicReturnPath(formData);
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/academic"); revalidatePath(target);
+  go(target, "Đã cập nhật homework completion.");
 }
 
 export async function createAssignment(formData: FormData) {
@@ -1157,9 +1164,10 @@ export async function saveAssessmentResult(formData: FormData) {
     graded_at: new Date().toISOString(),
     published_at: publish ? new Date().toISOString() : null
   }, { onConflict: "assessment_id,student_id" });
-  if (error) go("/academic", undefined, error.message);
-  revalidatePath("/academic");
-  go("/academic", "Đã lưu điểm assessment.");
+  const target=academicReturnPath(formData);
+  if (error) go(target, undefined, error.message);
+  revalidatePath("/academic"); revalidatePath(target);
+  go(target, "Đã lưu điểm assessment.");
 }
 
 export async function submitProgressFeedback(formData: FormData) {
@@ -1408,6 +1416,8 @@ export async function createPlacementTest(formData: FormData) {
     duration_minutes: duration,
     scheduled_start: scheduledDate.toISOString(),
     note: text(formData.get("note")) || null,
+    assigned_teacher_id: text(formData.get("assigned_teacher_id")) || null,
+    google_form_url: text(formData.get("google_form_url")) || "https://docs.google.com/forms/d/e/1FAIpQLSeomhHBjnWulq0oeOEVz55jI36LJJaQJrDDyzgHAacUFWHYPw/viewform?usp=send_form",
     status: "Scheduled",
     created_by: profile.id
   });
@@ -1838,6 +1848,170 @@ export async function revokeBusinessIntelligenceAccess(formData:FormData){
   if(error) go("/business-intelligence?view=settings",undefined,error.message);
   revalidatePath("/business-intelligence");
   go("/business-intelligence?view=settings","Đã thu hồi quyền Business Intelligence.");
+}
+
+
+export async function assignPlacementTeacher(formData:FormData){
+  await requireRole(["admin","academic_manager","customer_service"]);
+  const supabase=await createClient();
+  const placementId=text(formData.get("placement_test_id"));
+  const teacherId=text(formData.get("teacher_id"))||null;
+  const {error}=await supabase.from("placement_tests").update({
+    assigned_teacher_id:teacherId,
+    google_form_url:text(formData.get("google_form_url"))||null,
+    updated_at:new Date().toISOString()
+  }).eq("id",placementId);
+  if(error)go("/placement",undefined,error.message);
+  revalidatePath("/placement");revalidatePath("/schedule");revalidatePath("/dashboard");
+  go("/placement",teacherId?"Đã gắn GV phụ trách Placement full test.":"Đã bỏ GV phụ trách Placement.");
+}
+
+export async function createSyllabusTemplate(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const file=formData.get("outline_file");
+  const {data:row,error:insertError}=await supabase.from("syllabus_templates").insert({
+    course_template_id:text(formData.get("course_template_id"))||null,
+    code:text(formData.get("code")),
+    name:text(formData.get("name")),
+    description:text(formData.get("description"))||null,
+    version:Math.max(1,Math.round(toNumber(formData.get("version"),1))),
+    status:text(formData.get("status"))||"Draft",
+    created_by:profile.id
+  }).select("id").single();
+  if(insertError||!row)go("/curriculum",undefined,insertError?.message||"Không tạo được syllabus.");
+
+  if(file instanceof File&&file.size){
+    if(file.size>30*1024*1024)go("/curriculum",undefined,"Course outline tối đa 30MB.");
+    const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=`templates/${row.id}/${Date.now()}-${safe}`;
+    const {error:uploadError}=await supabase.storage.from("course-materials").upload(path,file,{upsert:false,contentType:file.type||undefined});
+    if(uploadError)go("/curriculum",undefined,`Không upload được outline: ${uploadError.message}`);
+    await supabase.from("syllabus_templates").update({
+      outline_file_path:path,outline_file_name:file.name,outline_file_mime:file.type||null,outline_file_size:file.size
+    }).eq("id",row.id);
+  }
+  revalidatePath("/curriculum");
+  go("/curriculum","Đã tạo syllabus master.");
+}
+
+export async function addSyllabusTemplateItem(formData:FormData){
+  await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const templateId=text(formData.get("template_id"));
+  const file=formData.get("material_file");
+  const payload:any={
+    template_id:templateId,session_no:Math.round(toNumber(formData.get("session_no"))),
+    title:text(formData.get("title")),learning_objectives:text(formData.get("learning_objectives"))||null,
+    content:text(formData.get("content"))||null,homework:text(formData.get("homework"))||null,
+    slide_url:text(formData.get("slide_url"))||null,
+    duration_minutes:text(formData.get("duration_minutes"))?Math.round(toNumber(formData.get("duration_minutes"))):null
+  };
+  const {data:item,error}=await supabase.from("syllabus_template_items").upsert(payload,{onConflict:"template_id,session_no"}).select("id").single();
+  if(error||!item)go("/curriculum",undefined,error?.message||"Không lưu được syllabus item.");
+  if(file instanceof File&&file.size){
+    if(file.size>30*1024*1024)go("/curriculum",undefined,"Tài liệu tối đa 30MB.");
+    const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=`templates/${templateId}/sessions/${payload.session_no}/${Date.now()}-${safe}`;
+    const {error:uploadError}=await supabase.storage.from("course-materials").upload(path,file,{upsert:false,contentType:file.type||undefined});
+    if(uploadError)go("/curriculum",undefined,uploadError.message);
+    await supabase.from("syllabus_template_items").update({
+      material_file_path:path,material_file_name:file.name,material_file_mime:file.type||null,material_file_size:file.size
+    }).eq("id",item.id);
+  }
+  revalidatePath("/curriculum");
+  go("/curriculum",`Đã lưu nội dung buổi ${payload.session_no}.`);
+}
+
+export async function duplicateSyllabusToClass(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const templateId=text(formData.get("template_id"));
+  const classId=text(formData.get("class_id"));
+  const {data:items,error}=await supabase.from("syllabus_template_items").select("*").eq("template_id",templateId).order("session_no");
+  if(error)go("/curriculum",undefined,error.message);
+  if(!items?.length)go("/curriculum",undefined,"Syllabus master chưa có buổi học để duplicate.");
+  const rows=items.map((x:any)=>({
+    class_id:classId,session_no:x.session_no,source_template_id:templateId,source_template_item_id:x.id,
+    title:x.title,learning_objectives:x.learning_objectives,content:x.content,homework:x.homework,
+    slide_url:x.slide_url,material_file_path:x.material_file_path,material_file_name:x.material_file_name,
+    material_file_mime:x.material_file_mime,material_file_size:x.material_file_size,updated_by:profile.id,
+    updated_at:new Date().toISOString()
+  }));
+  const {error:upsertError}=await supabase.from("class_syllabus_items").upsert(rows,{onConflict:"class_id,session_no"});
+  if(upsertError)go("/curriculum",undefined,upsertError.message);
+  revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
+  go("/curriculum",`Đã duplicate ${rows.length} buổi syllabus xuống lớp.`);
+}
+
+export async function updateClassSyllabusItem(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager"]);
+  const supabase=await createClient();
+  const id=text(formData.get("item_id"));
+  const file=formData.get("material_file");
+  const payload:any={
+    title:text(formData.get("title")),learning_objectives:text(formData.get("learning_objectives"))||null,
+    content:text(formData.get("content"))||null,homework:text(formData.get("homework"))||null,
+    slide_url:text(formData.get("slide_url"))||null,updated_by:profile.id,updated_at:new Date().toISOString()
+  };
+  if(file instanceof File&&file.size){
+    if(file.size>30*1024*1024)go("/curriculum",undefined,"Tài liệu tối đa 30MB.");
+    const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=`classes/${text(formData.get("class_id"))}/sessions/${text(formData.get("session_no"))}/${Date.now()}-${safe}`;
+    const {error:uploadError}=await supabase.storage.from("course-materials").upload(path,file,{upsert:false,contentType:file.type||undefined});
+    if(uploadError)go("/curriculum",undefined,uploadError.message);
+    Object.assign(payload,{material_file_path:path,material_file_name:file.name,material_file_mime:file.type||null,material_file_size:file.size});
+  }
+  const {error}=await supabase.from("class_syllabus_items").update(payload).eq("id",id);
+  if(error)go("/curriculum",undefined,error.message);
+  revalidatePath("/curriculum");revalidatePath("/academic");revalidatePath("/schedule");revalidatePath("/learning");
+  go("/curriculum","Đã cập nhật syllabus của lớp.");
+}
+
+export async function saveStudentMilestoneScore(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager","customer_service","teacher"]);
+  const supabase=await createClient();
+  const classId=text(formData.get("class_id"));
+  const studentId=text(formData.get("student_id"));
+  const type=text(formData.get("type"));
+  if(!["Midterm","Final"].includes(type))go(academicReturnPath(formData),undefined,"Chỉ hỗ trợ Midterm hoặc Final tại form nhanh.");
+  const date=text(formData.get("assessment_date"))||new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
+  let {data:assessment}=await supabase.from("assessments").select("id").eq("class_id",classId).eq("type",type).is("archived_at",null).order("created_at",{ascending:false}).limit(1).maybeSingle();
+  if(!assessment){
+    const created=await supabase.from("assessments").insert({
+      class_id:classId,name:`${type} · ${date}`,type,assessment_date:date,max_score:9,status:"Published",created_by:profile.id
+    }).select("id").single();
+    if(created.error||!created.data)go(academicReturnPath(formData),undefined,created.error?.message||"Không tạo được assessment.");
+    assessment=created.data;
+  }
+  const {error}=await supabase.from("assessment_results").upsert({
+    assessment_id:assessment.id,student_id:studentId,
+    score:text(formData.get("score"))?toNumber(formData.get("score")):null,
+    band:text(formData.get("band"))||null,comment:text(formData.get("comment"))||null,
+    graded_by:profile.id,graded_at:new Date().toISOString(),
+    published_at:formData.get("publish")==="on"?new Date().toISOString():null
+  },{onConflict:"assessment_id,student_id"});
+  const target=academicReturnPath(formData);
+  if(error)go(target,undefined,error.message);
+  revalidatePath(target);revalidatePath("/academic");revalidatePath("/learning");
+  go(target,`Đã lưu ${type}.`);
+}
+
+export async function createLearningRecommendation(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager","customer_service","teacher"]);
+  const supabase=await createClient();
+  const studentId=text(formData.get("student_id"));
+  const {error}=await supabase.from("student_learning_recommendations").insert({
+    student_id:studentId,enrollment_id:text(formData.get("enrollment_id"))||null,
+    teacher_id:text(formData.get("teacher_id"))||null,category:text(formData.get("category"))||"Academic",
+    priority:text(formData.get("priority"))||"Medium",title:text(formData.get("title")),
+    recommendation:text(formData.get("recommendation")),evidence:text(formData.get("evidence"))||null,
+    visible_to_student:formData.get("visible_to_student")==="on",created_by:profile.id
+  });
+  const target=academicReturnPath(formData);
+  if(error)go(target,undefined,error.message);
+  revalidatePath(target);revalidatePath("/learning");revalidatePath("/academic");
+  go(target,"Đã gửi recommendation về hồ sơ học tập.");
 }
 
 // v1.2.0 — Finance, expense accounting, receipts and notifications

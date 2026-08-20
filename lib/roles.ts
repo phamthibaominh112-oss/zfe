@@ -50,7 +50,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/placement", label: "Placement Test", short: "PT", group: "Học viên & Học thuật" },
   { href: "/academic", label: "Học thuật", short: "✓", group: "Học viên & Học thuật" },
   { href: "/quality", label: "Chất lượng GV", short: "★", group: "Học viên & Học thuật" },
-  { href: "/catalog", label: "Chương trình", short: "PL", group: "Học viên & Học thuật" },
+  { href: "/curriculum", label: "Chương trình & Syllabus", short: "SY", group: "Học viên & Học thuật" },
 
   { href: "/finance", label: "Thu phí & tái phí", short: "₫", group: "Business & Tài chính" },
   { href: "/finance/expenses", label: "Chi phí & báo cáo", short: "TC", group: "Business & Tài chính" },
@@ -70,7 +70,7 @@ const ACADEMIC_NAV: NavItem[] = [
   { href: "/placement", label: "Placement Test", short: "PT" },
   { href: "/academic", label: "Điểm danh & học tập", short: "✓" },
   { href: "/quality", label: "Chất lượng GV", short: "★" },
-  { href: "/catalog", label: "Chương trình", short: "PL" },
+  { href: "/curriculum", label: "Chương trình & Syllabus", short: "SY" },
   { href: "/sop", label: "SOP & Training", short: "SOP" }
 ];
 
@@ -91,6 +91,7 @@ const CUSTOMER_SERVICE_NAV: NavItem[] = [
   { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/students", label: "Hồ sơ học viên", short: "HV" },
   { href: "/placement", label: "Placement Test", short: "PT" },
+  { href: "/academic", label: "Academic Record", short: "AR" },
   { href: "/finance", label: "Thu phí & tái phí", short: "₫" },
   { href: "/classes", label: "Tình trạng lớp", short: "▦" },
   { href: "/sop", label: "SOP & Training", short: "SOP" }
@@ -99,6 +100,7 @@ const CUSTOMER_SERVICE_NAV: NavItem[] = [
 const STUDENT_NAV: NavItem[] = [
   { href: "/dashboard", label: "Trang chủ", short: "⌂" },
   { href: "/schedule", label: "Lịch học", short: "◷" },
+  { href: "/learning", label: "Học tập & tiến bộ", short: "LP" },
   { href: "/classes", label: "Lộ trình & lớp", short: "▦" },
   { href: "/finance", label: "Học phí", short: "₫" }
 ];

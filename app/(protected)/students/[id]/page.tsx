@@ -27,7 +27,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
   const enrollmentIds = (enrollments || []).map((x: any) => x.id);
   const classIds = (enrollments || []).map((x: any) => x.class_id);
 
-  const canAcademic = ["admin","academic_manager","teacher","student"].includes(profile.role);
+  const canAcademic = ["admin","academic_manager","customer_service","teacher","student"].includes(profile.role);
   const canFinance = ["admin","customer_service","student"].includes(profile.role);
   const canEditProfile = ["admin","academic_manager","customer_service"].includes(profile.role);
 
@@ -55,7 +55,7 @@ export default async function StudentDetailPage({ params, searchParams }: { para
       : Promise.resolve({ data: [] as any[] })
   ]);
 
-  const actions = <div className="page-actions">
+  const actions = <div className="page-actions"><a className="button button-secondary" href={`/students/${student.id}/learning`}>Học tập & tiến bộ</a>
     {canEditProfile ? <FormDetails title="Chỉnh sửa hồ sơ"><form action={updateStudent}><input type="hidden" name="student_id" value={student.id}/><FormGrid>
       <Field label="Họ và tên" name="full_name" required defaultValue={student.full_name} />
       <Field label="Ngày sinh" name="date_of_birth" type="date" defaultValue={(student as any).date_of_birth || ""} />
