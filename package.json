@@ -1,6 +1,6 @@
 {
   "name": "ze-centeros-production",
-  "version": "2.0.2",
+  "version": "2.1.1",
   "private": true,
   "engines": {
     "node": ">=22.0.0"
@@ -18,7 +18,8 @@
     "@supabase/supabase-js": "2.111.0",
     "next": "16.2.12",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "exceljs": "4.4.0"
   },
   "devDependencies": {
     "@types/node": "22.15.3",

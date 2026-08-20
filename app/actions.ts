@@ -8,6 +8,7 @@ import { requireProfile, requireRole } from "@/lib/auth";
 import { text, toNumber } from "@/lib/format";
 import type { AppRole } from "@/lib/roles";
 import { canAccessStaffOps, staffOpsPerson, STAFF_OPS_PEOPLE } from "@/lib/staff-ops";
+import { IMPORT_META, type ImportType, readImportFile, validateImportRows, textValue, numberValue, dateValue, dateTimeValue } from "@/lib/bulk-import";
 
 function go(path: string, message?: string, error?: string): never {
   const params = new URLSearchParams();
@@ -842,51 +843,34 @@ export async function completeSession(formData: FormData) {
 }
 
 export async function batchMarkAttendance(formData: FormData) {
-  const profile = await requireRole(["admin","academic_manager","teacher"]);
-  const supabase = await createClient();
+  const profile = await requireRole(["admin","academic_manager","customer_service","teacher"]);
+  const admin=createAdminClient();
+  const sessionId=text(formData.get("session_id"));
+  const classId=text(formData.get("class_id"));
+  if(!sessionId||!classId)go("/academic",undefined,"Không xác định được Session / Lớp.");
 
-  const sessionId = text(formData.get("session_id"));
-  const classId = text(formData.get("class_id"));
-  if (!sessionId || !classId) go("/academic", undefined, "Không xác định được Session / Lớp.");
+  const {data:session,error:sessionError}=await admin.from("sessions").select("id,class_id,scheduled_date,status,session_teachers(teacher_id)").eq("id",sessionId).eq("class_id",classId).is("archived_at",null).maybeSingle();
+  if(sessionError||!session)go("/academic",undefined,sessionError?.message||"Session không tồn tại.");
+  if(String(session.status).toLowerCase().includes("cancel"))go("/academic",undefined,"Không điểm danh session đã huỷ.");
 
-  const { data: roster, error: rosterError } = await supabase
-    .from("enrollments")
-    .select("student_id")
-    .eq("class_id", classId)
-    .eq("status", "Active")
-    .is("archived_at", null);
+  if(profile.role==="teacher"){
+    const {data:teacher}=await admin.from("teachers").select("id").eq("user_id",profile.id).maybeSingle();
+    if(!teacher||(session.session_teachers||[]).every((x:any)=>x.teacher_id!==teacher.id))go("/academic",undefined,"Bạn không được phân công session này.");
+  }
 
-  if (rosterError) go("/academic", undefined, rosterError.message);
-  if (!roster?.length) go("/academic", undefined, "Lớp chưa có học viên active.");
+  const {data:roster,error:rosterError}=await admin.from("enrollments").select("student_id,start_date,end_date").eq("class_id",classId).is("archived_at",null);
+  if(rosterError)go("/academic",undefined,rosterError.message);
+  const eligible=(roster||[]).filter((r:any)=>String(r.start_date||"")<=session.scheduled_date&&(!r.end_date||String(r.end_date)>=session.scheduled_date));
+  if(!eligible.length)go("/academic",undefined,"Không có học viên thuộc roster tại ngày diễn ra session.");
 
-  const rows = (roster as any[]).map((row:any) => {
-    const studentId = String(row.student_id);
-    const status = text(formData.get(`status_${studentId}`)) || "Present";
-    const lateMinutes = status === "Late"
-      ? Math.max(0, toNumber(formData.get(`late_${studentId}`), 5))
-      : 0;
-    const reason = text(formData.get(`reason_${studentId}`)) || null;
-
-    return {
-      session_id: sessionId,
-      student_id: studentId,
-      status,
-      late_minutes: lateMinutes,
-      reason,
-      marked_by: profile.id,
-      marked_at: new Date().toISOString()
-    };
+  const rows=eligible.map((row:any)=>{
+    const studentId=String(row.student_id);const status=text(formData.get(`status_${studentId}`))||"Present";
+    return {session_id:sessionId,student_id:studentId,status,late_minutes:status==="Late"?Math.max(0,toNumber(formData.get(`late_${studentId}`),5)):0,reason:text(formData.get(`reason_${studentId}`))||null,marked_by:profile.id,marked_at:new Date().toISOString()};
   });
-
-  const { error } = await supabase
-    .from("attendance")
-    .upsert(rows, { onConflict: "session_id,student_id" });
-
-  if (error) go("/academic", undefined, error.message);
-
-  revalidatePath("/academic");
-  revalidatePath("/dashboard");
-  go("/academic", `Đã lưu điểm danh ${rows.length} học viên trong một lần.`);
+  const {error}=await admin.from("attendance").upsert(rows,{onConflict:"session_id,student_id"});
+  if(error)go("/academic",undefined,error.message);
+  revalidatePath("/academic");revalidatePath("/dashboard");revalidatePath(`/students`);
+  go("/academic",`Đã lưu điểm danh ${rows.length} học viên trong một lần.`);
 }
 
 export async function quickMarkAttendance(formData: FormData) {
@@ -1812,6 +1796,127 @@ export async function updateRenewalFollowup(formData: FormData) {
   go("/finance", "Đã cập nhật follow-up tái phí.");
 }
 
+function canUseImportType(role:string,type:ImportType){return IMPORT_META[type]?.roles.includes(role);}
+function importTarget(jobId?:string){return jobId?`/imports?job=${jobId}`:"/imports";}
+
+export async function uploadBulkImport(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager","customer_service"]);
+  const type=text(formData.get("import_type")) as ImportType;
+  if(!IMPORT_META[type]||!canUseImportType(profile.role,type))go("/imports",undefined,"Role này không được import loại dữ liệu đã chọn.");
+  const file=formData.get("file");
+  if(!(file instanceof File)||!file.size)go("/imports",undefined,"Chọn file Excel trước.");
+  const admin=createAdminClient();
+  try{
+    const parsed=await readImportFile(file,type);
+    const [{data:students},{data:classes},{data:categories}]=await Promise.all([
+      admin.from("students").select("id,code,email,full_name").is("archived_at",null),
+      admin.from("classes").select("id,code,name").is("archived_at",null),
+      admin.from("finance_categories").select("id,code,name").eq("is_active",true)
+    ]);
+    const staged=validateImportRows(type,parsed.rows,{students:students||[],classes:classes||[],categories:categories||[]});
+    const valid=staged.filter(x=>!x.errors.length).length;const errors=staged.length-valid;
+    const {data:job,error:jobError}=await admin.from("bulk_import_jobs").insert({
+      import_type:type,file_name:file.name,sheet_name:parsed.sheetName,status:errors?"Preview":"Ready",
+      total_rows:staged.length,valid_rows:valid,error_rows:errors,created_by:profile.id,
+      summary:{expected_sheet:IMPORT_META[type].sheet}
+    }).select("id").single();
+    if(jobError||!job)go("/imports",undefined,jobError?.message||"Không tạo được import job.");
+    for(let i=0;i<staged.length;i+=400){
+      const chunk=staged.slice(i,i+400).map(r=>({job_id:job.id,row_no:r.rowNo,payload:r.payload,validation_errors:r.errors,status:r.errors.length?"Error":"Valid"}));
+      const {error}=await admin.from("bulk_import_rows").insert(chunk);if(error)go(importTarget(job.id),undefined,error.message);
+    }
+    revalidatePath("/imports");go(importTarget(job.id),errors?`Preview xong: ${valid} valid · ${errors} lỗi. Sửa file rồi upload lại trước khi Commit.`:`Preview xong: ${valid} dòng hợp lệ. Có thể Commit.`);
+  }catch(error:any){go("/imports",undefined,error?.message||"Không đọc được file import.");}
+}
+
+async function importResolveStudent(admin:any,payload:any){
+  const code=textValue(payload.student_code).toUpperCase();const email=textValue(payload.student_email||payload.email).toLowerCase();
+  if(code){const {data}=await admin.from("students").select("id,code,full_name,email").eq("code",code).maybeSingle();if(data)return data;}
+  if(email){const {data}=await admin.from("students").select("id,code,full_name,email").ilike("email",email).maybeSingle();if(data)return data;}
+  return null;
+}
+async function importResolveClass(admin:any,code:any){const c=textValue(code).toUpperCase();if(!c)return null;const {data}=await admin.from("classes").select("id,code,name").eq("code",c).maybeSingle();return data;}
+
+export async function commitBulkImport(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager","customer_service"]);
+  const jobId=text(formData.get("job_id"));const admin=createAdminClient();
+  const {data:job,error:jobError}=await admin.from("bulk_import_jobs").select("*").eq("id",jobId).maybeSingle();
+  if(jobError||!job)go("/imports",undefined,jobError?.message||"Import job không tồn tại.");
+  const type=job.import_type as ImportType;
+  if(!canUseImportType(profile.role,type))go(importTarget(jobId),undefined,"Role này không được Commit loại import này.");
+  if(profile.role!=="admin"&&job.created_by!==profile.id)go(importTarget(jobId),undefined,"Bạn chỉ Commit được import job do mình upload.");
+  if(Number(job.error_rows)>0)go(importTarget(jobId),undefined,"Job còn dòng lỗi. Không Commit để tránh dữ liệu nửa đúng nửa sai.");
+  if(job.status==="Completed")go(importTarget(jobId),"Job này đã Commit rồi.");
+  const {data:rows,error:rowsError}=await admin.from("bulk_import_rows").select("id,row_no,payload,status").eq("job_id",jobId).eq("status","Valid").order("row_no");
+  if(rowsError)go(importTarget(jobId),undefined,rowsError.message);
+  await admin.from("bulk_import_jobs").update({status:"Importing",updated_at:new Date().toISOString()}).eq("id",jobId);
+  let imported=0,skipped=0;const failures:string[]=[];
+  const mark=async(id:number,status:"Imported"|"Skipped"|"Error",note:string)=>{await admin.from("bulk_import_rows").update({status,result_note:note,updated_at:new Date().toISOString()}).eq("id",id);};
+  try{
+    if(type==="curriculum"){
+      const groups=new Map<string,any[]>();for(const r of rows||[]){const code=textValue(r.payload.program_code).toUpperCase();if(!groups.has(code))groups.set(code,[]);groups.get(code)!.push(r);}
+      const names:Record<string,string>={ZEB:"IELTS Beginner",ZEF:"IELTS Foundation",ZEE:"IELTS Entry",ZEM:"IELTS Master"};
+      for(const [program,group] of groups){
+        let {data:master}=await admin.from("syllabus_templates").select("id,status").eq("program_code",program).is("archived_at",null).maybeSingle();
+        if(!master){const created=await admin.from("syllabus_templates").insert({program_code:program,code:`${program}-MASTER-36`,name:`${names[program]} · Master Syllabus`,description:textValue(group[0]?.payload?.program_name)||null,version:1,status:"Draft",created_by:profile.id}).select("id,status").single();if(created.error||!created.data)throw new Error(`${program}: ${created.error?.message||"không tạo được master"}`);master=created.data;}
+        const items=group.map(r=>({template_id:master.id,session_no:Number(r.payload.session_no),title:textValue(r.payload.title),learning_objectives:textValue(r.payload.learning_objectives)||null,content:textValue(r.payload.content)||null,homework:textValue(r.payload.homework)||null,slide_url:textValue(r.payload.slide_url)||null,duration_minutes:Number(r.payload.duration_minutes)||90,updated_at:new Date().toISOString()}));
+        const {error:itemError}=await admin.from("syllabus_template_items").upsert(items,{onConflict:"template_id,session_no"});if(itemError)throw new Error(`${program}: ${itemError.message}`);
+        const {error:activeError}=await admin.from("syllabus_templates").update({status:"Active",updated_at:new Date().toISOString()}).eq("id",master.id);if(activeError)throw new Error(`${program}: ${activeError.message}`);
+        for(const r of group){await mark(r.id,"Imported",`${program} Master · Buổi ${r.payload.session_no}`);imported++;}
+      }
+    }else{
+      for(const row of rows||[]){const x:any=row.payload;
+        try{
+          if(type==="students"){
+            const existing=await importResolveStudent(admin,x);const code=textValue(x.student_code).toUpperCase();
+            const payload:any={full_name:textValue(x.full_name),date_of_birth:dateValue(x.date_of_birth)||null,phone:textValue(x.phone)||null,email:textValue(x.email)||null,guardian_name:textValue(x.guardian_name)||null,guardian_phone:textValue(x.guardian_phone)||null,source:textValue(x.source)||null,status:textValue(x.status)||"Waiting for class",entry_level:textValue(x.entry_level)||null,target:textValue(x.target)||null,notes:textValue(x.notes)||null,updated_at:new Date().toISOString()};
+            let studentId:string;
+            if(existing){const {error}=await admin.from("students").update(payload).eq("id",existing.id);if(error)throw error;studentId=existing.id;}
+            else{if(code)payload.code=code;payload.created_by=profile.id;const {data,error}=await admin.from("students").insert(payload).select("id").single();if(error||!data)throw error||new Error("Không tạo được student");studentId=data.id;}
+            if(x.class_code){const cls=await importResolveClass(admin,x.class_code);if(cls){const {error}=await admin.from("enrollments").upsert({student_id:studentId,class_id:cls.id,start_date:dateValue(x.start_date)||new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"}),end_date:dateValue(x.end_date)||null,status:textValue(x.enrollment_status)||"Active",target:textValue(x.target)||null,enrolled_by:profile.id,updated_at:new Date().toISOString()},{onConflict:"student_id,class_id"});if(error)throw error;}}
+            await mark(row.id,"Imported",existing?"Updated student":"Created student");imported++;
+          }else if(type==="payments"){
+            const student=await importResolveStudent(admin,x);if(!student)throw new Error("Không match được học viên");
+            if(x.reference){const {data:dup}=await admin.from("payment_transactions").select("id").eq("reference",textValue(x.reference)).maybeSingle();if(dup){await mark(row.id,"Skipped","Reference đã tồn tại");skipped++;continue;}}
+            const cls=await importResolveClass(admin,x.class_code);let enrollmentId:null|string=null;if(cls){const {data:en}=await admin.from("enrollments").select("id").eq("student_id",student.id).eq("class_id",cls.id).maybeSingle();enrollmentId=en?.id||null;}
+            const packageName=textValue(x.package_name);let {data:account}=await admin.from("tuition_accounts").select("id,gross_amount,discount_amount,net_amount").eq("student_id",student.id).eq("package_name",packageName).is("archived_at",null).order("created_at",{ascending:false}).limit(1).maybeSingle();
+            const gross=numberValue(x.gross_amount),discount=Math.max(0,numberValue(x.discount_amount)||0),net=Math.max(0,gross-discount);
+            if(!account){const created=await admin.from("tuition_accounts").insert({student_id:student.id,enrollment_id:enrollmentId,package_name:packageName,gross_amount:gross,discount_amount:discount,net_amount:net,paid_amount:0,balance_amount:net,purchased_hours:Number.isFinite(numberValue(x.purchased_hours))?numberValue(x.purchased_hours):null,renewal_due_date:dateValue(x.renewal_due_date)||null,status:"Open",created_by:profile.id}).select("id,gross_amount,discount_amount,net_amount").single();if(created.error||!created.data)throw created.error||new Error("Không tạo tuition account");account=created.data;}
+            const {error}=await admin.from("payment_transactions").insert({tuition_account_id:account.id,amount:numberValue(x.amount_paid),paid_at:dateTimeValue(x.paid_at)||new Date().toISOString(),method:textValue(x.payment_method)||null,reference:textValue(x.reference)||null,note:textValue(x.note)||null,created_by:profile.id});if(error)throw error;
+            await mark(row.id,"Imported","Payment + receipt trigger");imported++;
+          }else if(type==="expenses"){
+            const {data:cat}=await admin.from("finance_categories").select("id").eq("code",textValue(x.category_code).toUpperCase()).maybeSingle();if(!cat)throw new Error("Category không tồn tại");
+            const sourceKey=textValue(x.reference)?`IMPORT:${textValue(x.reference)}`:null;if(sourceKey){const {data:dup}=await admin.from("expense_transactions").select("id").eq("source_key",sourceKey).maybeSingle();if(dup){await mark(row.id,"Skipped","Reference/source_key đã tồn tại");skipped++;continue;}}
+            const status=["Draft","Approved","Paid"].includes(textValue(x.status))?textValue(x.status):"Paid";
+            const {error}=await admin.from("expense_transactions").insert({category_id:cat.id,expense_date:dateValue(x.expense_date),amount:numberValue(x.amount),vendor:textValue(x.vendor)||null,description:textValue(x.description),payment_method:textValue(x.payment_method)||null,reference:textValue(x.reference)||null,status,payroll_month:dateValue(x.payroll_month)||null,source_key:sourceKey,receipt_url:textValue(x.receipt_url)||null,created_by:profile.id,approved_by:status!=="Draft"?profile.id:null,approved_at:status!=="Draft"?new Date().toISOString():null});if(error)throw error;
+            await mark(row.id,"Imported","Expense recorded");imported++;
+          }else if(type==="scores"){
+            const student=await importResolveStudent(admin,x);if(!student)throw new Error("Không match được học viên");const cls=await importResolveClass(admin,x.class_code);if(!cls)throw new Error("Không match được lớp");
+            const assessmentType=textValue(x.assessment_type)||"Other",assessmentName=textValue(x.assessment_name)||assessmentType,assessmentDate=dateValue(x.assessment_date)||new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
+            let {data:assessment}=await admin.from("assessments").select("id,max_score").eq("class_id",cls.id).eq("type",assessmentType).eq("name",assessmentName).maybeSingle();
+            if(!assessment){const created=await admin.from("assessments").insert({class_id:cls.id,name:assessmentName,type:assessmentType,assessment_date:assessmentDate,max_score:Number.isFinite(numberValue(x.max_score))&&numberValue(x.max_score)>0?numberValue(x.max_score):9,status:"Published",created_by:profile.id}).select("id,max_score").single();if(created.error||!created.data)throw created.error||new Error("Không tạo được assessment");assessment=created.data;}
+            const {error}=await admin.from("assessment_results").upsert({assessment_id:assessment.id,student_id:student.id,score:Number.isFinite(numberValue(x.score))?numberValue(x.score):null,band:textValue(x.band)||null,cefr:textValue(x.cefr)||null,comment:textValue(x.comment)||null,graded_by:profile.id,graded_at:new Date().toISOString(),published_at:textValue(x.publish).toUpperCase()==="N"?null:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:"assessment_id,student_id"});if(error)throw error;
+            await mark(row.id,"Imported",`${cls.code} · ${assessmentName}`);imported++;
+          }
+        }catch(error:any){failures.push(`Dòng ${row.row_no}: ${error?.message||error}`);await mark(row.id,"Error",error?.message||"Import failed");}
+      }
+    }
+  }catch(error:any){failures.push(error?.message||String(error));}
+  const finalStatus=failures.length?(imported||skipped?"Partial":"Failed"):"Completed";
+  await admin.from("bulk_import_jobs").update({status:finalStatus,imported_rows:imported,skipped_rows:skipped,error_rows:failures.length,committed_at:new Date().toISOString(),updated_at:new Date().toISOString(),summary:{...(job.summary||{}),commit_failures:failures.slice(0,20)}}).eq("id",jobId);
+  revalidatePath("/imports");revalidatePath("/students");revalidatePath("/finance");revalidatePath("/business-intelligence");revalidatePath("/academic");revalidatePath("/curriculum");
+  if(failures.length)go(importTarget(jobId),`Imported ${imported}, skipped ${skipped}.`,failures.slice(0,3).join(" · "));
+  go(importTarget(jobId),`Import hoàn tất: ${imported} dòng imported${skipped?`, ${skipped} skipped`:""}.`);
+}
+
+export async function cancelBulkImportJob(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager","customer_service"]);const jobId=text(formData.get("job_id"));const admin=createAdminClient();
+  const {data:job}=await admin.from("bulk_import_jobs").select("created_by,status").eq("id",jobId).maybeSingle();if(!job)go("/imports",undefined,"Job không tồn tại.");
+  if(profile.role!=="admin"&&job.created_by!==profile.id)go(importTarget(jobId),undefined,"Không có quyền hủy job này.");
+  if(job.status==="Completed")go(importTarget(jobId),undefined,"Job đã import xong, không thể hủy audit record.");
+  await admin.from("bulk_import_jobs").update({status:"Cancelled",updated_at:new Date().toISOString()}).eq("id",jobId);revalidatePath("/imports");go("/imports","Đã hủy import job.");
+}
+
 export async function updateBusinessKpiSettings(formData:FormData){
   const profile=await requireRole(["admin"]);
   const supabase=await createClient();
@@ -2537,6 +2642,22 @@ export async function cancelTeacherCheckinOverrideRequest(formData: FormData) {
   if(error) go("/workforce",undefined,error.message);
   revalidatePath("/workforce");
   go("/workforce","Đã hủy yêu cầu override.");
+}
+
+export async function adminApproveTeacherOverrideRequestsBatch(formData:FormData){
+  await requireRole(["admin"]);
+  const supabase=await createClient();
+  const ids=[...new Set(formData.getAll("request_id").map(String).filter(Boolean))];
+  if(!ids.length)go("/workforce",undefined,"Chọn ít nhất một yêu cầu override.");
+  const note=text(formData.get("admin_note"))||null;
+  let approved=0;const failed:string[]=[];
+  for(const id of ids){
+    const {error}=await supabase.rpc("admin_approve_teacher_override_request",{p_request_id:id,p_admin_note:note});
+    if(error)failed.push(`${id.slice(0,8)}: ${error.message}`);else approved++;
+  }
+  revalidatePath("/workforce");revalidatePath("/dashboard");revalidatePath("/payroll");
+  if(failed.length)go("/workforce",`Đã approve ${approved}/${ids.length}.`,failed.slice(0,3).join(" · "));
+  go("/workforce",`Đã approve và áp dụng ${approved} yêu cầu override.`);
 }
 
 export async function adminApproveTeacherOverrideRequest(formData: FormData) {

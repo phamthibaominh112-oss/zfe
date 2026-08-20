@@ -5,6 +5,7 @@ import { Empty, Flash, FormDetails, PageHeader, Panel, Status } from "@/componen
 import { requireRole } from "@/lib/auth";
 import { formatDate, formatDateTime, sessionDisplayLabel } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalProgramFromClass, mergeSyllabusItem } from "@/lib/canonical-syllabus";
 
 export default async function AcademicPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
@@ -41,10 +42,36 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
   }));
   const assessmentOptions = (assessments.data||[]).map((x:any)=>({value:x.id,label:`${x.classes?.code} · ${x.type} · ${x.name}`}));
   const today = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
-  const todaySessions=(sessions.data||[]).filter((x:any)=>x.scheduled_date===today&&!String(x.status).toLowerCase().includes("cancel"));
-  const rosterByClass=new Map<string,any[]>();
-  for(const row of enrollments.data||[]){const list=rosterByClass.get(row.class_id)||[];list.push(row);rosterByClass.set(row.class_id,list);}
-  const attendanceMap=new Map((attendanceRows.data||[]).map((x:any)=>[`${x.session_id}|${x.student_id}`,x]));
+  // v2.1.0: attendance is loaded independently from the generic Academic query.
+  // This avoids a teacher losing a session because the generic list is limited/RLS-filtered,
+  // and also lets teachers finish batch attendance for recent past sessions.
+  const admin=createAdminClient();
+  const attendanceStartDate=new Date(`${today}T00:00:00+07:00`);attendanceStartDate.setDate(attendanceStartDate.getDate()-7);
+  const attendanceStart=attendanceStartDate.toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
+  let ownTeacherId:string|null=null;
+  if(profile.role==="teacher"){
+    const {data:ownTeacher}=await admin.from("teachers").select("id").eq("user_id",profile.id).maybeSingle();ownTeacherId=ownTeacher?.id||null;
+  }
+  let attendanceSessionsRaw:any[]=[];
+  if(profile.role==="teacher"){
+    if(ownTeacherId){
+      const {data}=await admin.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers!inner(teacher_id,role,teachers(full_name))").eq("session_teachers.teacher_id",ownTeacherId).gte("scheduled_date",attendanceStart).lte("scheduled_date",today).neq("status","Cancelled").is("archived_at",null).order("scheduled_date",{ascending:false}).order("start_time",{ascending:false}).limit(100);
+      attendanceSessionsRaw=data||[];
+    }
+  }else{
+    const {data}=await admin.from("sessions").select("id,class_id,session_no,scheduled_date,start_time,end_time,status,topic,classes(code,name),session_teachers(teacher_id,role,teachers(full_name))").gte("scheduled_date",attendanceStart).lte("scheduled_date",today).neq("status","Cancelled").is("archived_at",null).order("scheduled_date",{ascending:false}).order("start_time",{ascending:false}).limit(100);
+    attendanceSessionsRaw=data||[];
+  }
+  const attendanceSessions=attendanceSessionsRaw;
+  const attendanceClassIds=[...new Set(attendanceSessions.map((x:any)=>x.class_id).filter(Boolean))];
+  const [{data:batchEnrollments},{data:batchAttendanceRows}]=await Promise.all([
+    attendanceClassIds.length?admin.from("enrollments").select("id,class_id,student_id,start_date,end_date,status,students(id,code,full_name)").in("class_id",attendanceClassIds).is("archived_at",null):Promise.resolve({data:[] as any[]}),
+    attendanceSessions.length?admin.from("attendance").select("id,session_id,student_id,status,late_minutes,reason,marked_at").in("session_id",attendanceSessions.map((x:any)=>x.id)):Promise.resolve({data:[] as any[]})
+  ]);
+  const batchRosterByClass=new Map<string,any[]>();
+  for(const row of batchEnrollments||[]){const list=batchRosterByClass.get(row.class_id)||[];list.push(row);batchRosterByClass.set(row.class_id,list);}
+  const rosterForSession=(session:any)=>(batchRosterByClass.get(session.class_id)||[]).filter((en:any)=>String(en.start_date||"")<=session.scheduled_date&&(!en.end_date||String(en.end_date)>=session.scheduled_date));
+  const attendanceMap=new Map((batchAttendanceRows||[]).map((x:any)=>[`${x.session_id}|${x.student_id}`,x]));
   const milestoneSessions=(sessions.data||[]).filter((x:any)=>[18,36].includes(Number(x.session_no))&&!String(x.status).toLowerCase().includes("cancel")).sort((a:any,b:any)=>String(a.scheduled_date).localeCompare(String(b.scheduled_date)));
 
   const actions = <div className="page-actions">
@@ -89,19 +116,19 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Vận hành học thuật" title="Điểm danh, bài tập & đánh giá" description={profile.role === "teacher" ? "Cập nhật điểm danh, bài tập và phản hồi cho các lớp bạn phụ trách." : "Theo dõi điểm danh, mức độ hoàn thành bài tập, điểm số và các phản hồi đang chờ duyệt."} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
-  <Panel className="section-gap" title="Syllabus buổi học" description="GV/Học vụ/CSKH nhìn cùng một nội dung đã được Admin/Học vụ duplicate từ syllabus master.">
-    {(syllabusMasters.data?.length||syllabusOverrides.data?.length)?<div className="academic-syllabus-strip">{(sessions.data||[]).slice(0,12).map((s:any)=>{const p=canonicalProgramFromClass(s.classes?.code,s.classes?.name); const sy=mergeSyllabusItem(p?masterMap.get(`${p}|${s.session_no}`):null,overrideMap.get(`${s.class_id}|${s.session_no}`));return <div className={`academic-syllabus-card ${sy?"ready":"missing"}`} key={s.id}><span>{s.classes?.code} · Buổi {s.session_no}</span><strong>{sy?.title||s.topic||"Chưa có syllabus"}</strong><small>{sy?.learning_objectives||sy?.content||formatDate(s.scheduled_date)}</small>{sy?.slide_url?<a href={sy.slide_url} target="_blank">Mở slide →</a>:null}</div>})}</div>:<Empty title="Chưa có syllabus class-level" description="Admin/Học vụ vào Chương trình & Syllabus để duplicate master xuống lớp."/>}
+  <Panel className="section-gap" title="Syllabus buổi học" description="GV/Học vụ/CSKH nhìn cùng một nội dung được đọc trực tiếp từ syllabus master của chương trình; override chỉ áp dụng cho buổi ngoại lệ.">
+    {(syllabusMasters.data?.length||syllabusOverrides.data?.length)?<div className="academic-syllabus-strip">{(sessions.data||[]).slice(0,12).map((s:any)=>{const p=canonicalProgramFromClass(s.classes?.code,s.classes?.name); const sy=mergeSyllabusItem(p?masterMap.get(`${p}|${s.session_no}`):null,overrideMap.get(`${s.class_id}|${s.session_no}`));return <div className={`academic-syllabus-card ${sy?"ready":"missing"}`} key={s.id}><span>{s.classes?.code} · Buổi {s.session_no}</span><strong>{sy?.title||s.topic||"Chưa có syllabus"}</strong><small>{sy?.learning_objectives||sy?.content||formatDate(s.scheduled_date)}</small>{sy?.slide_url?<a href={sy.slide_url} target="_blank">Mở slide →</a>:null}</div>})}</div>:<Empty title="Chưa có syllabus class-level" description="Admin/Học vụ tạo đủ Master 36 buổi cho ZEB/ZEF/ZEE/ZEM."/>}
   </Panel>
-    <Panel className="section-gap attendance-command-center" title="Điểm danh theo Session" description="Bấm Session → roster của lớp hiện ngay → chọn trạng thái cho nhiều học viên → Lưu một lần.">
-      {todaySessions.length ? <div className="attendance-session-selector">
-        {todaySessions.map((session:any)=>{
-          const roster=rosterByClass.get(session.class_id)||[];
+    <Panel className="section-gap attendance-command-center" title="Điểm danh theo Session" description="Hiện riêng các session 7 ngày gần nhất của đúng GV được phân công. Bấm Session → roster → tick cả lớp → Lưu một lần.">
+      {attendanceSessions.length ? <div className="attendance-session-selector">
+        {attendanceSessions.map((session:any)=>{
+          const roster=rosterForSession(session);
           const markedCount=roster.filter((en:any)=>attendanceMap.get(`${session.id}|${en.student_id}`)).length;
           return <details className="attendance-batch-session" key={session.id}>
             <summary>
               <div className="attendance-session-summary-main">
                 <strong>{session.classes?.code} · {sessionDisplayLabel(session.status,session.session_no)}</strong>
-                <span>{session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length ? `${roster.length} HV` : "⚠ Chưa có roster / chưa đọc được enrollment"}</span>
+                <span>{formatDate(session.scheduled_date)} · {session.start_time?.slice(0,5)}–{session.end_time?.slice(0,5)} · {roster.length ? `${roster.length} HV` : "⚠ Chưa có roster / chưa đọc được enrollment"}</span>
               </div>
               <div className="attendance-session-summary-status">
                 <b>{roster.length ? `${markedCount}/${roster.length}` : "—"}</b>
@@ -177,7 +204,7 @@ export default async function AcademicPage({ searchParams }: { searchParams: Pro
             </form>
           </details>
         })}
-      </div> : <Empty title="Hôm nay chưa có Session" description="Khi có lớp hôm nay, bấm Session để mở roster và điểm danh hàng loạt."/>}
+      </div> : <Empty title="Không có Session cần điểm danh" description={profile.role==="teacher"?"Không tìm thấy session được phân công cho GV này trong 7 ngày gần nhất.":"Không có session trong 7 ngày gần nhất."}/>}
     </Panel>
 
     {milestoneSessions.length?<Panel className="section-gap" title="Cảnh báo Midterm / Final" description="Buổi 18 = Midterm · Buổi 36 = Final."><div className="milestone-warning-grid">{milestoneSessions.slice(0,10).map((row:any)=>{const isMid=Number(row.session_no)===18;return <div className={`milestone-warning-card ${isMid?"mid":"final"}`} key={row.id}><span>{isMid?"MIDTERM":"FINAL"}</span><strong>{row.classes?.code} · Buổi {row.session_no}</strong><small>{formatDate(row.scheduled_date)} · {row.start_time?.slice(0,5)}</small></div>})}</div></Panel>:null}

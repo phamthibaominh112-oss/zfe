@@ -28,7 +28,7 @@ export default async function CurriculumPage({searchParams}:{searchParams:Promis
   const classOptions=(classes.data||[]).filter((x:any)=>canonicalProgramFromClass(x.code,x.name)).map((x:any)=>({value:x.id,label:`${x.code} · ${x.name}`}));
 
   return <>
-    <PageHeader eyebrow="Curriculum Control" title="Chương trình & Syllabus" description="Mỗi chương trình chỉ có 1 syllabus gốc 36 buổi. Mọi lớp ZEB/ZEF/ZEE/ZEM tự inherit từ master theo mã lớp; chỉ override khi thật sự cần."/>
+    <PageHeader eyebrow="Curriculum Control" title="Chương trình & Syllabus" description="Mỗi chương trình chỉ có 1 syllabus gốc 36 buổi. Mọi lớp ZEB/ZEF/ZEE/ZEM tự inherit từ master theo mã lớp; chỉ override khi thật sự cần." actions={<a className="button button-yellow" href="/imports">Import Excel 36 buổi →</a>}/>
     <Flash message={params.message} error={params.error}/>
 
     <section className="canonical-program-grid">
@@ -43,7 +43,7 @@ export default async function CurriculumPage({searchParams}:{searchParams:Promis
             <div className="canonical-progress"><strong>{completeness.count}/36 buổi</strong><i><b style={{width:`${Math.min(100,completeness.count/36*100)}%`}}/></i><small>{completeness.complete?"Đủ 36/36":`Thiếu: ${completeness.missing.slice(0,12).join(", ")}${completeness.missing.length>12?"…":""}`}</small></div>
             {master.outline_file_path?<a className="button button-secondary button-small" href={signed.get(`tpl-${master.id}`)||"#"} target="_blank">Course Outline</a>:null}
             {master.status!=="Active"?<form action={activateCanonicalSyllabus}><input type="hidden" name="template_id" value={master.id}/><button className="button button-primary button-small" disabled={!completeness.complete}>Kích hoạt 36/36</button></form>:null}
-          </>:<FormDetails title={`Tạo ${program.code} Master`}><form action={createSyllabusTemplate} encType="multipart/form-data"><input type="hidden" name="program_code" value={program.code}/><FormGrid><TextAreaField label="Mô tả / learning outcomes" name="description"/><label className="form-group"><span>Course outline gốc</span><input className="input" type="file" name="outline_file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls"/><small>Tối đa 30MB</small></label><button className="button button-primary">Tạo {program.code} Master</button></FormGrid></form></FormDetails>}
+          </>:<FormDetails title={`Tạo ${program.code} Master`} className="curriculum-create-master-details"><form action={createSyllabusTemplate} encType="multipart/form-data"><input type="hidden" name="program_code" value={program.code}/><FormGrid><TextAreaField label="Mô tả / learning outcomes" name="description"/><label className="form-group"><span>Course outline gốc</span><input className="input" type="file" name="outline_file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls"/><small>Tối đa 30MB</small></label><button className="button button-primary">Tạo {program.code} Master</button></FormGrid></form></FormDetails>}
         </article>
       })}
     </section>
