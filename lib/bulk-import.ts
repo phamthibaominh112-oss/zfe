@@ -60,7 +60,22 @@ export async function readImportFile(file:File,type:ImportType):Promise<{sheetNa
     if(rowNo===1)return;
     const payload:Record<string,any>={};let has=false;
     headers.forEach((h,col)=>{if(!h)return;const val=plainCell(row.getCell(col).value);payload[h]=val;if(val!==null&&val!=="")has=true;});
-    if(has)rows.push({...payload,__row_no:rowNo});
+    if(!has)return;
+
+    // Curriculum workbooks often contain one program-summary / metadata row
+    // immediately before Session 1. It may repeat program/level/syllabus fields
+    // but has no real lesson number/title. Treat that row as metadata instead
+    // of counting it as a 37th syllabus session. Genuine lesson rows with a
+    // valid session_no are still validated normally below.
+    if(type==="curriculum"){
+      const rawNo=numberValue(payload.session_no);
+      const validNo=Number.isInteger(rawNo)&&rawNo>=1&&rawNo<=36;
+      const hasTitle=Boolean(textValue(payload.title));
+      const looksLikeProgramMeta=!validNo&&!hasTitle&&Boolean(textValue(payload.program_code)||textValue(payload.syllabus_code)||textValue(payload.program_name));
+      if(looksLikeProgramMeta)return;
+    }
+
+    rows.push({...payload,__row_no:rowNo});
   });
   if(!rows.length)throw new Error(`Sheet ${ws.name} không có dữ liệu.`);
   if(rows.length>3000)throw new Error("Mỗi import tối đa 3.000 dòng để bảo đảm kiểm soát lỗi.");
@@ -111,8 +126,39 @@ export function validateImportRows(type:ImportType,rows:Record<string,any>[],ref
     return {rowNo,payload,errors:e};
   });
   if(type==="curriculum"){
-    const groups=new Map<string,ImportRow[]>();for(const row of result){const p=textValue(row.payload.program_code).toUpperCase();if(!groups.has(p))groups.set(p,[]);groups.get(p)!.push(row);}
-    for(const [program,group] of groups){if(!allowedPrograms.has(program))continue;const nums=group.map(x=>numberValue(x.payload.session_no));const unique=new Set(nums);const missing=Array.from({length:36},(_,i)=>i+1).filter(n=>!unique.has(n));const duplicate=nums.filter((n,i)=>nums.indexOf(n)!==i);if(group.length!==36||unique.size!==36||missing.length||duplicate.length){const msg=`${program} phải đúng 36 dòng Buổi 1→36${missing.length?`; thiếu ${missing.join(",")}`:""}${duplicate.length?`; trùng ${[...new Set(duplicate)].join(",")}`:""}`;group.forEach(x=>x.errors.push(msg));}}
+    const groups=new Map<string,ImportRow[]>();
+    for(const row of result){
+      const p=textValue(row.payload.program_code).toUpperCase();
+      if(!groups.has(p))groups.set(p,[]);
+      groups.get(p)!.push(row);
+    }
+    for(const [program,group] of groups){
+      if(!allowedPrograms.has(program))continue;
+
+      const validSessionRows=group.filter(x=>{
+        const no=numberValue(x.payload.session_no);
+        return Number.isInteger(no)&&no>=1&&no<=36;
+      });
+      const nums=validSessionRows.map(x=>numberValue(x.payload.session_no));
+      const unique=new Set(nums);
+      const missing=Array.from({length:36},(_,i)=>i+1).filter(n=>!unique.has(n));
+      const duplicateNos=[...new Set(nums.filter((n,i)=>nums.indexOf(n)!==i))];
+
+      // Do not spam the same completeness error onto all 36 correct rows.
+      // Mark only duplicate rows directly; for missing sessions attach one
+      // concise master-level error to the first valid row so Commit remains
+      // blocked while the preview stays readable.
+      if(duplicateNos.length){
+        for(const row of validSessionRows){
+          const no=numberValue(row.payload.session_no);
+          if(duplicateNos.includes(no))row.errors.push(`${program} trùng Buổi ${no}`);
+        }
+      }
+      if(missing.length){
+        const target=validSessionRows[0]||group[0];
+        if(target)target.errors.push(`${program} thiếu Buổi ${missing.join(", ")} — syllabus master phải đủ 1→36`);
+      }
+    }
   }
   return result;
 }
