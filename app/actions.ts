@@ -2186,12 +2186,33 @@ export async function createLearningRecommendation(formData:FormData){
   go(target,"Đã gửi recommendation về hồ sơ học tập.");
 }
 
+export async function submitStudentCareFeedback(formData:FormData){
+  const profile=await requireRole(["teacher","admin"]); const supabase=await createClient();
+  const enrollmentId=text(formData.get("enrollment_id"));
+  const payload={enrollment_id:enrollmentId,cycle_type:text(formData.get("cycle_type")),cycle_no:toNumber(formData.get("cycle_no")),due_date:text(formData.get("due_date")),listening:text(formData.get("listening"))||null,reading:text(formData.get("reading"))||null,writing:text(formData.get("writing"))||null,speaking:text(formData.get("speaking"))||null,attitude:text(formData.get("attitude")),attendance_note:text(formData.get("attendance_note"))||null,homework_note:text(formData.get("homework_note"))||null,strengths:text(formData.get("strengths")),areas_to_improve:text(formData.get("areas_to_improve")),overall_feedback:text(formData.get("overall_feedback")),recommendation:text(formData.get("recommendation")),status:"Submitted",submitted_by:profile.id,submitted_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  const {error}=await supabase.from("student_care_feedback").upsert(payload,{onConflict:"enrollment_id,cycle_type,cycle_no"});
+  if(error)go("/student-care",undefined,error.message); revalidatePath("/student-care");revalidatePath("/dashboard");go("/student-care","Đã gửi feedback cho Academic duyệt.");
+}
+export async function reviewStudentCareFeedback(formData:FormData){
+  const profile=await requireRole(["admin","academic_manager"]); const supabase=await createClient(); const decision=text(formData.get("decision"));
+  const patch=decision==="Approved"?{status:"Approved",approved_by:profile.id,approved_at:new Date().toISOString(),revision_note:null,updated_at:new Date().toISOString()}:{status:"Revision requested",revision_note:text(formData.get("revision_note"))||"Vui lòng bổ sung feedback.",updated_at:new Date().toISOString()};
+  const {error}=await supabase.from("student_care_feedback").update(patch).eq("id",text(formData.get("feedback_id")));if(error)go("/student-care",undefined,error.message);revalidatePath("/student-care");revalidatePath("/dashboard");go("/student-care",decision==="Approved"?"Đã duyệt feedback; CSKH có thể touch HV/PHHS.":"Đã yêu cầu GV chỉnh feedback.");
+}
+export async function markStudentCareTouch(formData:FormData){
+  const profile=await requireRole(["admin","customer_service"]);const supabase=await createClient();
+  const {error}=await supabase.from("student_care_feedback").update({cskh_touched_by:profile.id,cskh_touched_at:new Date().toISOString(),cskh_contact_method:text(formData.get("contact_method"))||"Phone",cskh_contact_note:text(formData.get("contact_note")),updated_at:new Date().toISOString()}).eq("id",text(formData.get("feedback_id"))).eq("status","Approved");
+  if(error)go("/student-care",undefined,error.message);revalidatePath("/student-care");revalidatePath("/dashboard");go("/student-care","Đã log CSKH touch / báo cáo HV-PHHS.");
+}
+
 // v1.2.0 — Finance, expense accounting, receipts and notifications
 export async function createExpense(formData: FormData) {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin","customer_service"]);
   const supabase = await createClient();
+  if(profile.role==="customer_service" && ["Teacher payroll","Staff payroll"].includes(text(formData.get("cost_type")))) go("/finance/expenses",undefined,"CSKH không được ghi nhận chi phí payroll.");
   const amount = toNumber(formData.get("amount"));
   if (amount <= 0) go("/finance/expenses", undefined, "Số tiền chi phải lớn hơn 0.");
+  let receipt:any={}; const file=formData.get("receipt_file");
+  if(file instanceof File&&file.size){if(file.size>20*1024*1024)go("/finance/expenses",undefined,"Chứng từ tối đa 20MB.");const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${profile.id}/${Date.now()}-${safe}`;const up=await supabase.storage.from("expense-documents").upload(path,file,{contentType:file.type||undefined});if(up.error)go("/finance/expenses",undefined,up.error.message);receipt={receipt_path:path,receipt_name:file.name,receipt_mime:file.type||null,receipt_size:file.size};}
   const { error } = await supabase.from("expense_transactions").insert({
     category_id: text(formData.get("category_id")),
     cost_type: text(formData.get("cost_type")) || "Variable cost",
@@ -2205,6 +2226,7 @@ export async function createExpense(formData: FormData) {
     teacher_id: text(formData.get("teacher_id")) || null,
     payroll_month: text(formData.get("payroll_month")) || null,
     receipt_url: text(formData.get("receipt_url")) || null,
+    ...receipt,
     created_by: profile.id,
     approved_by: profile.id,
     approved_at: new Date().toISOString()
@@ -2218,10 +2240,13 @@ export async function createExpense(formData: FormData) {
 }
 
 export async function updateExpense(formData: FormData) {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin","customer_service"]);
   const supabase = await createClient();
+  if(profile.role==="customer_service" && ["Teacher payroll","Staff payroll"].includes(text(formData.get("cost_type")))) go("/finance/expenses",undefined,"CSKH không được chỉnh payroll.");
   const amount = toNumber(formData.get("amount"));
   if (amount <= 0) go("/finance/expenses", undefined, "Số tiền chi phải lớn hơn 0.");
+  let receipt:any={}; const file=formData.get("receipt_file");
+  if(file instanceof File&&file.size){if(file.size>20*1024*1024)go("/finance/expenses",undefined,"Chứng từ tối đa 20MB.");const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${profile.id}/${Date.now()}-${safe}`;const up=await supabase.storage.from("expense-documents").upload(path,file,{contentType:file.type||undefined});if(up.error)go("/finance/expenses",undefined,up.error.message);receipt={receipt_path:path,receipt_name:file.name,receipt_mime:file.type||null,receipt_size:file.size};}
   const { error } = await supabase.from("expense_transactions").update({
     category_id: text(formData.get("category_id")),
     cost_type: text(formData.get("cost_type")) || "Variable cost",
@@ -2233,6 +2258,7 @@ export async function updateExpense(formData: FormData) {
     reference: text(formData.get("reference")) || null,
     status: text(formData.get("status")) || "Paid",
     receipt_url: text(formData.get("receipt_url")) || null,
+    ...receipt,
     approved_by: profile.id,
     approved_at: new Date().toISOString()
   }).eq("id", text(formData.get("expense_id")));

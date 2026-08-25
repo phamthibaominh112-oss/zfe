@@ -47,6 +47,7 @@ const ADMIN_NAV: NavItem[] = [
 
   { href: "/classes", label: "Lớp học", short: "▦", group: "Học viên & Học thuật" },
   { href: "/students", label: "Học viên", short: "HV", group: "Học viên & Học thuật" },
+  { href: "/student-care", label: "Chăm sóc HV", short: "CS", group: "Học viên & Học thuật" },
   { href: "/placement", label: "Placement Test", short: "PT", group: "Học viên & Học thuật" },
   { href: "/academic", label: "Học thuật", short: "✓", group: "Học viên & Học thuật" },
   { href: "/quality", label: "Chất lượng GV", short: "★", group: "Học viên & Học thuật" },
@@ -68,6 +69,7 @@ const ACADEMIC_NAV: NavItem[] = [
   { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/classes", label: "Lớp học", short: "▦" },
   { href: "/students", label: "Học viên", short: "HV" },
+  { href: "/student-care", label: "Chăm sóc HV", short: "CS" },
   { href: "/placement", label: "Placement Test", short: "PT" },
   { href: "/academic", label: "Điểm danh & học tập", short: "✓" },
   { href: "/quality", label: "Chất lượng GV", short: "★" },
@@ -83,6 +85,7 @@ const TEACHER_NAV: NavItem[] = [
   { href: "/placement", label: "Placement Test", short: "PT" },
   { href: "/classes", label: "Lớp của tôi", short: "▦" },
   { href: "/students", label: "Học viên của tôi", short: "HV" },
+  { href: "/student-care", label: "Feedback định kỳ", short: "FB" },
   { href: "/academic", label: "Điểm danh & bài tập", short: "✓" },
   { href: "/quality", label: "Đánh giá của tôi", short: "★" },
   { href: "/payroll", label: "Lương tháng", short: "₫" }
@@ -92,10 +95,12 @@ const CUSTOMER_SERVICE_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tổng quan CSKH", short: "⌂" },
   { href: "/workforce", label: "Lịch làm & chấm công", short: "CC" },
   { href: "/students", label: "Hồ sơ học viên", short: "HV" },
+  { href: "/student-care", label: "Chăm sóc định kỳ", short: "CS" },
   { href: "/placement", label: "Placement Test", short: "PT" },
   { href: "/academic", label: "Academic Record", short: "AR" },
   { href: "/imports", label: "Import dữ liệu", short: "IM" },
   { href: "/finance", label: "Thu phí & tái phí", short: "₫" },
+  { href: "/finance/expenses", label: "Chi phí", short: "CP" },
   { href: "/classes", label: "Tình trạng lớp", short: "▦" },
   { href: "/sop", label: "SOP & Training", short: "SOP" }
 ];

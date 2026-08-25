@@ -9,6 +9,7 @@ import { dateOnlyString, vietnamTodayDate, vietnamTodayString } from "@/lib/viet
 import type { CSSProperties, ReactNode } from "react";
 import { canAccessStaffOps } from "@/lib/staff-ops";
 import { buildFinanceDashboardData, extractBaselineFinanceData } from "@/lib/finance-dashboard-data";
+import { careCyclesForEnrollment } from "@/lib/student-care";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -47,6 +48,8 @@ function SessionList({ sessions, emptyTitle, emptyDescription }: { sessions: any
   })}</div>;
 }
 
+async function careAlerts(supabase:any,role:string,teacherUserId:string|undefined,today:string){const d=new Date(`${today}T00:00:00Z`);d.setUTCDate(d.getUTCDate()+7);const horizon=d.toISOString().slice(0,10);const [ens,fbs]=await Promise.all([supabase.from("enrollments").select("id,start_date,end_date,status,students(id,code,full_name),classes(code,name,class_teachers(role,teachers(user_id)))").eq("status","Active").is("archived_at",null),supabase.from("student_care_feedback").select("id,enrollment_id,cycle_type,cycle_no,status,cskh_touched_at")]);const map=new Map((fbs.data||[]).map((x:any)=>[`${x.enrollment_id}|${x.cycle_type}|${x.cycle_no}`,x]));const out:any[]=[];for(const en of ens.data||[]){if(role==="teacher"&&teacherUserId){const links=joined(en.classes)?.class_teachers||[];if(!links.some((l:any)=>joined(l.teachers)?.user_id===teacherUserId))continue;}for(const c of careCyclesForEnrollment(en.start_date,en.end_date,horizon)){const fb:any=map.get(`${en.id}|${c.cycle_type}|${c.cycle_no}`);const needed=role==="teacher"?(!fb||["Draft","Revision requested"].includes(fb.status)):role==="academic_manager"?fb?.status==="Submitted":role==="customer_service"?fb?.status==="Approved"&&!fb.cskh_touched_at:(!fb||["Draft","Revision requested","Submitted"].includes(fb.status)||(fb?.status==="Approved"&&!fb.cskh_touched_at));if(needed)out.push({en,cycle:c,fb});}}return out;}
+
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string,string|undefined>> }) {
   const profile = await requireProfile();
   const supabase = await createClient();
@@ -72,6 +75,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const mainTeacherClassIds=new Set((classTeacherLinks.data||[]).map((x:any)=>x.class_id));
     const weekScheduledClassIds=new Set((weekSessions.data||[]).filter((x:any)=>!String(x.status).toLowerCase().includes("cancel")).map((x:any)=>x.class_id));
     const classesNeedingSchedule=(activeClasses.data||[]).filter((x:any)=>!mainTeacherClassIds.has(x.id)||!weekScheduledClassIds.has(x.id));
+    const careDue=await careAlerts(supabase,profile.role,undefined,today);
     let adminFinance = { revenue: 0, expenses: 0, outstanding: 0, renewalAlerts: 0, allocated:0, recognized:0, deferred:0, futureAllocated:0, unallocated:0 };
     let adminTeacherRates: any[] = [];
     let adminPayrollStatements: any[] = [];
@@ -118,14 +122,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         label={`${formatDate(today)} · ${todaySessions.length} buổi học`}
         title={nextSession ? `Tiếp theo: ${nextSession.start_time?.slice(0,5)} · ${nextClass?.code || "Lớp học"}` : "Hôm nay chưa có buổi học sắp tới"}
         description={nextSession ? `${nextClass?.name || "Buổi học"} · ${teacherNames(nextSession)}` : "Bạn có thể kiểm tra lịch tuần hoặc tạo session mới cho lớp."}
-        meta={<><span>{(weekSessions.data || []).length} buổi trong tuần</span><span>{pendingFeedback.count || 0} feedback chờ duyệt</span><span>{waitingStudents.count || 0} HV chờ xếp lớp</span></>}
+        meta={<><span>{(weekSessions.data || []).length} buổi trong tuần</span><span>{pendingFeedback.count || 0} feedback chờ duyệt</span><span>{waitingStudents.count || 0} HV chờ xếp lớp</span><span>{careDue.length} care touch đến hạn</span></>}
         actions={<><Link className="button button-yellow" href="/schedule">Mở lịch tuần</Link><Link className="button hero-secondary" href="/classes">Xem lớp học</Link></>}
       />
       <div className="quick-actions-grid">
         <QuickAction href="/schedule" icon="◷" title="Xếp lịch" description="Tạo session và kiểm tra lịch tuần" />
         <QuickAction href="/workforce" icon="CC" title={profile.role === "admin" ? "Chấm công nhân sự" : "Lịch làm & chấm công"} description={profile.role === "admin" ? "Academic, CSKH và KPI giáo viên" : "Đăng ký ca và theo dõi giờ công"} tone="yellow" />
         <QuickAction href="/students" icon="HV" title="Xử lý học viên" description="Hồ sơ, lịch rảnh và xếp lớp" tone="yellow" />
-        <QuickAction href="/academic" icon="✓" title="Duyệt học thuật" description="Attendance, điểm và feedback" tone="green" />
+        <QuickAction href="/academic" icon="✓" title="Duyệt học thuật" description="Attendance, điểm và feedback" tone="green" /><QuickAction href="/student-care" icon="CS" title="Chăm sóc HV" description={`${careDue.length} feedback/touch sắp hoặc đã đến hạn`} tone="yellow" />
         <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Quy trình, Placement Test và hướng dẫn vận hành" />
         {canAccessStaffOps(profile) ? <QuickAction href="/staff-ops" icon="OPS" title={profile.role === "admin" ? "Staff Ops Control" : "Daily Work Log"} description={profile.role === "admin" ? "Review Khang · Thịnh · Mai" : "Handbook + log cuối ca"} tone="green" /> : null}
       </div>
@@ -219,6 +223,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const payrollHours = Number(payrollStatement.data?.completed_hours ?? livePayroll.data?.completed_hours ?? 0);
     const payrollRate = Number(payrollStatement.data?.hourly_rate_snapshot ?? livePayroll.data?.hourly_rate ?? compensation.data?.hourly_rate ?? 0);
     const payrollAmount = Number(payrollStatement.data?.gross_amount ?? livePayroll.data?.estimated_payroll ?? payrollHours * payrollRate);
+    const careDue=await careAlerts(supabase,"teacher",profile.id,today);
+    const nextWeekDate=vietnamTodayDate();const dayNo=nextWeekDate.getUTCDay()||7;nextWeekDate.setUTCDate(nextWeekDate.getUTCDate()-dayNo+8);const nextWeekStart=dateOnlyString(nextWeekDate);const nextWeekEndDate=new Date(nextWeekDate);nextWeekEndDate.setUTCDate(nextWeekEndDate.getUTCDate()+6);const nextWeekEnd=dateOnlyString(nextWeekEndDate);const {count:nextWeekAvailabilityCount}=teacher?await supabase.from("teacher_availability").select("id",{count:"exact",head:true}).eq("teacher_id",teacher.id).gte("effective_from",nextWeekStart).lte("effective_from",nextWeekEnd):{count:0};
 
     return <>
       <PageHeader eyebrow="Lịch dạy của tôi" title={`Chào ${profile.full_name}`} description="Bắt đầu từ lịch hôm nay, sau đó xử lý điểm danh, bài tập và feedback." />
@@ -234,7 +240,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <QuickAction href="/workforce" icon="KPI" title="Check-in & KPI" description="Chấm công buổi dạy và xem KPI tuân thủ" />
         {teacher?.is_placement_assessor ? <QuickAction href="/placement" icon="PT" title="Placement Speaking" description="Xem booking Speaking 15 phút được CSKH phân công" tone="yellow" /> : null}
         <QuickAction href="/academic" icon="✓" title="Điểm danh & bài tập" description="Attendance, BTVN và chấm chữa" />
-        <QuickAction href="/schedule" icon="◷" title="Lịch rảnh" description="Book lịch rảnh cho các tuần tới" tone="yellow" />
+        <QuickAction href="/schedule" icon="◷" title="Lịch rảnh" description={`Thứ Năm chốt tuần sau · ${nextWeekAvailabilityCount||0} slot đã lưu`} tone="yellow" /><QuickAction href="/student-care" icon="FB" title="Feedback HV đến hạn" description={`${careDue.length} HV cần First-week/Monthly feedback`} tone="green" />
         <QuickAction href="/payroll" icon="₫" title="Lương tháng" description={`${payrollHours.toLocaleString("vi-VN")} giờ · ${formatMoney(payrollAmount)}`} tone="green" />
       </div>
       <div className="metrics-grid compact-metrics">
@@ -278,10 +284,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       supabase.from("tuition_accounts").select("id,balance_amount,renewal_due_date,status,students(full_name,code)").order("renewal_due_date").limit(20),
       supabase.from("tuition_accounts").select("id", { count: "exact", head: true }).gte("renewal_due_date", today).lte("renewal_due_date", next14),
       supabase.from("renewal_followups").select("id,due_at,status,note,tuition_accounts(students(full_name,code))").eq("status", "Pending").order("due_at").limit(12),
-      supabase.from("enrollments").select("id,start_date,end_date,status,students(id,code,full_name,phone),classes(code,name)").eq("status","Active").is("archived_at",null).not("end_date","is",null).lte("end_date",dateOnlyString(new Date(vietnamTodayDate().getTime()+30*86400000))).order("end_date").limit(30)
+      supabase.from("enrollments").select("id,start_date,end_date,status,students(id,code,full_name,phone),classes(code,name)").eq("status","Active").is("archived_at",null).not("end_date","is",null).lte("end_date",next14).order("end_date").limit(30)
     ]);
     const outstanding = (accounts.data || []).reduce((sum: number, x: any) => sum + Number(x.balance_amount || 0), 0);
     const dueToday = (followups.data || []).filter((item: any) => String(item.due_at || "").slice(0,10) <= today);
+    const careDue=await careAlerts(supabase,"customer_service",undefined,today);
 
     return <>
       <PageHeader eyebrow="CSKH hôm nay" title={`Chào ${profile.full_name}`} description="Theo dõi học viên mới, học phí và các lịch tái phí cần xử lý." />
@@ -293,12 +300,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         meta={<><span>{students.count || 0} hồ sơ học viên</span><span>{waitingStudents.count || 0} HV chờ xếp lớp</span><span>{formatMoney(outstanding)} công nợ đang theo dõi</span></>}
         actions={<><Link className="button button-yellow" href="/finance">Mở danh sách tái phí</Link><Link className="button hero-secondary" href="/students">Hồ sơ học viên</Link></>}
       />
-      {(enrollmentRenewals.data||[]).length?<Panel className="section-gap" title="⚠ Cảnh báo tái phí theo End date" description="CSKH chủ động liên hệ trước khi khóa học kết thúc. Cảnh báo trước 30 ngày."><div className="renewal-watch-list">{(enrollmentRenewals.data||[]).map((row:any)=>{const st=joined(row.students);const cl=joined(row.classes);const days=Math.ceil((new Date(`${row.end_date}T00:00:00`).getTime()-Date.now())/86400000);return <Link href={`/students/${st?.id}`} className={`renewal-watch-row ${days<0?"overdue":days<=7?"urgent":""}`} key={row.id}><div><strong>{st?.code} · {st?.full_name}</strong><span>{cl?.code} · End {formatDate(row.end_date)}</span></div><b>{days<0?`Quá ${Math.abs(days)} ngày`:days===0?"Hôm nay":`Còn ${days} ngày`}</b></Link>})}</div></Panel>:null}
+      {(enrollmentRenewals.data||[]).length?<Panel className="section-gap" title="⚠ Cảnh báo tái phí theo End date" description="CSKH chủ động liên hệ trước khi khóa học kết thúc. Cảnh báo trước đúng 14 ngày."><div className="renewal-watch-list">{(enrollmentRenewals.data||[]).map((row:any)=>{const st=joined(row.students);const cl=joined(row.classes);const days=Math.ceil((new Date(`${row.end_date}T00:00:00`).getTime()-Date.now())/86400000);return <Link href={`/students/${st?.id}`} className={`renewal-watch-row ${days<0?"overdue":days<=7?"urgent":""}`} key={row.id}><div><strong>{st?.code} · {st?.full_name}</strong><span>{cl?.code} · End {formatDate(row.end_date)}</span></div><b>{days<0?`Quá ${Math.abs(days)} ngày`:days===0?"Hôm nay":`Còn ${days} ngày`}</b></Link>})}</div></Panel>:null}
       <div className="quick-actions-grid">
         <QuickAction href="/workforce" icon="CC" title="Lịch làm & chấm công" description="Đăng ký ca, Check-in/Check-out và giờ công" />
         <QuickAction href="/students" icon="+" title="Thêm học viên" description="Tạo hồ sơ và nhập lịch rảnh" />
         <QuickAction href="/finance" icon="₫" title="Ghi nhận thanh toán" description="Cập nhật tiền đóng và công nợ" tone="yellow" />
-        <QuickAction href="/finance" icon="↻" title="Tái phí" description="Theo dõi và tạo follow-up" tone="green" />
+        <QuickAction href="/finance" icon="↻" title="Tái phí" description="Theo dõi và tạo follow-up" tone="green" /><QuickAction href="/student-care" icon="CS" title="Feedback & CSKH touch" description={`${careDue.length} HV cần gọi/báo cáo`} tone="yellow" /><QuickAction href="/finance/expenses" icon="CP" title="Ghi nhận chi phí" description="Thêm khoản chi + upload hóa đơn/chứng từ" />
         <QuickAction href="/sop" icon="SOP" title="SOP & Training" description="Xem lại quy trình và hướng dẫn thao tác" />
         {canAccessStaffOps(profile) ? <QuickAction href="/staff-ops" icon="OPS" title="Daily Work Log" description="Handbook + log cuối ca" tone="green" /> : null}
       </div>

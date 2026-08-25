@@ -35,7 +35,7 @@ function costTypeLabel(value?: string) {
 }
 
 export default async function ExpensePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  await requireRole(["admin"]);
+  const profile=await requireRole(["admin","customer_service"]);
   const params = await searchParams;
   const supabase = await createClient();
   const range = monthRange(params.month);
@@ -69,6 +69,8 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
       .eq("payroll_month", range.start)
   ]);
 
+  const isAdmin=profile.role==="admin";
+  const visibleCostTypeOptions=isAdmin?costTypeOptions:costTypeOptions.filter(x=>!["Teacher payroll","Staff payroll"].includes(x.value));
   const categoryOptions = (categories || []).map((row: any) => ({
     value: row.id,
     label: row.name
@@ -98,10 +100,10 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
       description="Ghi nhận theo đúng cấu trúc: Nhóm chi phí, Loại chi phí, nội dung và số tiền."
       actions={<div className="row-actions">
         <FormDetails title="+ Ghi nhận khoản chi">
-          <form action={createExpense}>
+          <form action={createExpense} encType="multipart/form-data">
             <FormGrid>
               <SelectField label="Nhóm chi phí" name="category_id" required options={categoryOptions} />
-              <SelectField label="Loại chi phí" name="cost_type" required defaultValue="Variable cost" options={costTypeOptions} />
+              <SelectField label="Loại chi phí" name="cost_type" required defaultValue="Variable cost" options={visibleCostTypeOptions} />
               <Field label="Ngày phát sinh" name="expense_date" type="date" defaultValue={range.start} required />
               <Field label="Số tiền" name="amount" type="number" min="1" step="1000" required />
               <Field label="Nhà cung cấp / Người nhận" name="vendor" />
@@ -111,7 +113,7 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
               <SelectField label="Trạng thái" name="status" defaultValue="Paid" options={["Draft", "Approved", "Paid"].map((value) => ({ value, label: value }))} />
               <SelectField label="Giáo viên liên quan (nếu có)" name="teacher_id" options={teacherOptions} />
               <Field label="Tháng lương (nếu có)" name="payroll_month" type="date" />
-              <Field label="Link chứng từ" name="receipt_url" />
+              <Field label="Link chứng từ" name="receipt_url" /><label className="form-group"><span>Upload hóa đơn / chứng từ</span><input className="input" type="file" name="receipt_file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xlsx"/><small>Tối đa 20MB</small></label>
               <div className="form-actions"><button className="button button-primary">Lưu khoản chi</button></div>
             </FormGrid>
           </form>
@@ -138,7 +140,7 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
       <MetricCard label="Lương" value={formatMoney(payrollTotal)} tone="green" />
     </div>
 
-    <Panel
+    {isAdmin?<Panel
       className="section-gap"
       title="Thiết lập đơn giá giờ dạy"
       description="Admin cập nhật trực tiếp tại đây. Mức mới được dùng để tính lương và hiển thị ngay trên tài khoản giáo viên."
@@ -159,9 +161,9 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
           <button className="button button-primary rate-save-button">Lưu đơn giá</button>
         </form>;
       })}</div> : <Empty title="Chưa có giáo viên" description="Tạo hồ sơ giáo viên trước khi thiết lập đơn giá." />}
-    </Panel>
+    </Panel>:null}
 
-    <Panel
+    {isAdmin?<Panel
       className="section-gap"
       title="Tình trạng lương giáo viên"
       description="Lương chỉ nhảy vào bảng chi phí sau khi giáo viên xác nhận và Admin duyệt."
@@ -183,7 +185,7 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
           <td><Status value={statement?.admin_status || "Chưa tạo"} /></td>
         </tr>;
       })}</tbody></table></div> : <Empty title="Chưa có giáo viên" description="Không có dữ liệu để tính lương." />}
-    </Panel>
+    </Panel>:null}
 
     <Panel className="section-gap" title="Sổ chi phí" description={`${expenses?.length || 0} khoản chi trong tháng ${range.month}`}>
       {expenses?.length ? <div className="table-wrap"><table><thead><tr><th>Ngày</th><th>Nhóm chi phí</th><th>Loại</th><th>Nội dung</th><th>Người nhận</th><th>Số tiền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{expenses.map((row: any) => {
@@ -197,11 +199,11 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
           <td>{row.vendor || "—"}<br /><span className="muted">{row.payment_method || ""}</span></td>
           <td><strong>{formatMoney(row.amount)}</strong></td>
           <td><Status value={row.status} /></td>
-          <td><details className="inline-details"><summary className="button button-ghost button-small">Điều chỉnh</summary>
-            <form action={updateExpense} className="inline-edit-form">
+          <td>{row.receipt_path?<a className="text-link" href={`/finance/expenses/receipt/${row.id}`} target="_blank">Chứng từ</a>:row.receipt_url?<a className="text-link" href={row.receipt_url} target="_blank">Chứng từ ↗</a>:null}<details className="inline-details"><summary className="button button-ghost button-small">Điều chỉnh</summary>
+            <form action={updateExpense} encType="multipart/form-data" className="inline-edit-form">
               <input type="hidden" name="expense_id" value={row.id} />
               <SelectField label="Nhóm chi phí" name="category_id" defaultValue={row.category_id} required options={categoryOptions} />
-              <SelectField label="Loại chi phí" name="cost_type" defaultValue={row.cost_type || category?.group_name || "Variable cost"} required options={costTypeOptions} />
+              <SelectField label="Loại chi phí" name="cost_type" defaultValue={row.cost_type || category?.group_name || "Variable cost"} required options={visibleCostTypeOptions} />
               <Field label="Ngày chi" name="expense_date" type="date" defaultValue={row.expense_date} required />
               <Field label="Số tiền" name="amount" type="number" min="1" step="1000" defaultValue={row.amount} required />
               <Field label="Đơn vị/người nhận" name="vendor" defaultValue={row.vendor || ""} />
@@ -209,13 +211,13 @@ export default async function ExpensePage({ searchParams }: { searchParams: Prom
               <Field label="Phương thức" name="payment_method" defaultValue={row.payment_method || ""} />
               <Field label="Mã tham chiếu" name="reference" defaultValue={row.reference || ""} />
               <SelectField label="Trạng thái" name="status" defaultValue={row.status} options={["Draft", "Approved", "Paid", "Void"].map((value) => ({ value, label: value }))} />
-              <Field label="Link chứng từ" name="receipt_url" defaultValue={row.receipt_url || ""} />
+              <Field label="Link chứng từ" name="receipt_url" defaultValue={row.receipt_url || ""} /><label className="form-group"><span>Thay / thêm file chứng từ</span><input className="input" type="file" name="receipt_file"/></label>
               <button className="button button-primary">Lưu</button>
             </form>
-            <form action={archiveExpense} className="danger-inline-form">
+            {isAdmin?<form action={archiveExpense} className="danger-inline-form">
               <input type="hidden" name="expense_id" value={row.id} />
               <button className="button button-danger">Huỷ khoản chi</button>
-            </form>
+            </form>:null}
           </details></td>
         </tr>;
       })}</tbody></table></div> : <Empty title="Chưa có khoản chi trong tháng" description="Sử dụng nút Ghi nhận khoản chi để bắt đầu theo dõi." />}

@@ -1,6 +1,6 @@
 {
   "name": "ze-centeros-production",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "private": true,
   "engines": {
     "node": ">=22.0.0"

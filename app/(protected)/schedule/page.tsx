@@ -196,7 +196,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       : "Xếp session theo LỚP, sau đó gán GV/TA. Học viên nhận lịch thông qua enrollment vào lớp.";
 
   const actions = <div className="page-actions">
-    {profile.role === "teacher" ? <FormDetails title="Đăng ký lịch rảnh cả tuần"><TeacherAvailabilityWeekForm weekStart={start} weekEnd={end} weekOffset={safeOffset} existing={(availability.data||[]).filter((slot:any)=>overlapsPeriod(slot,start,end)).map((slot:any)=>({weekday:slot.weekday,start_time:slot.start_time,end_time:slot.end_time}))}/></FormDetails> : canManage ? <FormDetails title="Thêm lịch rảnh GV"><form action={createTeacherAvailability}><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><input type="hidden" name="return_observer" value={selectedObserverId}/><FormGrid>
+    {profile.role === "teacher" ? <a className="button button-primary" href="#weekly-availability">Đăng ký lịch rảnh cả tuần</a> : canManage ? <FormDetails title="Thêm lịch rảnh GV"><form action={createTeacherAvailability}><input type="hidden" name="return_week" value={String(safeOffset)}/><input type="hidden" name="return_teacher" value={selectedTeacherId}/><input type="hidden" name="return_class" value={selectedClassId}/><input type="hidden" name="return_observer" value={selectedObserverId}/><FormGrid>
       <SelectField label="Giáo viên" name="teacher_id" required options={(teachers.data||[]).map((x:any)=>({value:x.id,label:`${x.code} · ${x.full_name}`}))}/>
       <SelectField label="Ngày" name="weekday" required options={DAY_LABELS.map((label,index)=>({value:String(index+1),label}))}/>
       <Field label="Bắt đầu" name="start_time" type="time" required/><Field label="Kết thúc" name="end_time" type="time" required/>
@@ -219,6 +219,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   return <>
     <PageHeader eyebrow="Lịch tuần" title={pageTitle} description={pageDescription} actions={actions}/>
     <Flash message={params.message} error={params.error}/>
+    {profile.role==="teacher"?<section id="weekly-availability" className="weekly-availability-inline-panel"><div className="weekly-availability-inline-title"><div><strong>Đăng ký lịch rảnh · tuần đang xem</strong><span>Thứ Năm hàng tuần chốt lịch rảnh GV. Form nằm trong luồng trang, không che lịch phía sau.</span></div></div><TeacherAvailabilityWeekForm weekStart={start} weekEnd={end} weekOffset={safeOffset} existing={(availability.data||[]).filter((slot:any)=>overlapsPeriod(slot,start,end)).map((slot:any)=>({weekday:slot.weekday,start_time:slot.start_time,end_time:slot.end_time}))}/></section>:null}
     {canManage ? <div className="session-team-capability-banner"><strong>v1.4.0 · DIRECT SESSION ASSIGNMENT + TA</strong><span>Mỗi session = 1 buổi duy nhất, có thể gán đồng thời 1 GV chính + 1 Co-teacher/TA. Không tạo buổi thứ hai cho TA.</span></div> : null}
     {canManage ? <section className="teacher-schedule-filter class-schedule-filter">
       <div className="teacher-filter-copy">
